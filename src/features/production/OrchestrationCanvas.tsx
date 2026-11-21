@@ -453,8 +453,7 @@ export function OrchestrationCanvas({ businessId }: { businessId: string }) {
               ) {
                 run({ type: "execute", stageId: n.id });
               } else {
-                setSelection(n.id);
-                setInspectorTab("operation");
+                focus(n.id);
               }
             },
             total: rows.length,
@@ -495,8 +494,7 @@ export function OrchestrationCanvas({ businessId }: { businessId: string }) {
         connectable: false,
         data: {
           onOpen: () => {
-            setSelection(n.id);
-            setInspectorTab("operation");
+            focus(n.id);
           },
           owner: n.id,
           count: s.edges.filter((e) => e.source === n.id).length,
@@ -802,8 +800,7 @@ export function OrchestrationCanvas({ businessId }: { businessId: string }) {
             nodesConnectable={!readOnly}
             deleteKeyCode={null}
             onNodeClick={(_, n) => {
-              setSelection(n.id.startsWith("branch:") ? n.id.slice(7) : n.id);
-              setInspectorTab("operation");
+              focus(n.id.startsWith("branch:") ? n.id.slice(7) : n.id);
             }}
             onPaneClick={() => setSelection("")}
             onNodeDragStop={(_, n) =>
