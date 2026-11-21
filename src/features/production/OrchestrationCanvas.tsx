@@ -74,6 +74,12 @@ import {
   type OPlatform,
 } from "../../../shared/orchestration";
 import "./orchestration-canvas.css";
+import {
+  WorkflowNodeCard,
+  WorkflowNodeParam,
+  WorkflowNodeMetrics,
+  type WorkflowCardStatus,
+} from "../../components/ui/WorkflowNodeCard";
 
 const kinds = {
   source: "数据源",
@@ -103,50 +109,204 @@ const stateNames = {
 };
 function BoardNode({ data, selected }: any) {
   const n: ONode = data.node;
-  return (
-    <div
-      className={`o-node o-${n.kind}${selected ? " is-selected" : ""}${n.paused ? " is-paused" : ""}`}
-    >
-      {n.kind !== "source" && <Handle type="target" position={Position.Left} />}
-      {n.kind==='sourcePool'&&<svg className="o-reservoir-shape" viewBox="0 0 220 150" preserveAspectRatio="none" aria-hidden="true"><path d="M1 18 Q110 -10 219 18 L219 131 Q110 166 1 131 Z"/><ellipse cx="110" cy="18" rx="109" ry="16"/></svg>}
-      {n.kind==='buffer'&&<svg className="o-tray-shape" viewBox="0 0 220 150" preserveAspectRatio="none" aria-hidden="true"><path d="M1 1H219V124L203 148H17L1 124Z"/><path d="M1 124H75L84 134H136L145 124H219"/></svg>}
-      {n.kind==='stage'&&<div className="o-platform-symbol">{n.platform==='human'?<TeamOutlined aria-hidden="true"/>:n.platform==='compress'?<ThunderboltOutlined aria-hidden="true"/>:<RobotOutlined aria-hidden="true"/>}</div>}
-      <div className="o-node-kind">
-        {icons[n.kind]}
-        <span>{kinds[n.kind]}</span>
-        {n.paused && <span>已暂停</span>}
-      </div>
-      <strong>{n.label}</strong>
-      <div className="o-node-meta">
-        {n.kind === "stage"
-          ? platforms[n.platform!]
-          : n.kind === "source"
-            ? n.bucket || "待填写 TOS 桶"
-            : data.cids || "等待数据"}
-      </div>
-      {n.kind === "stage" ? (
-        <div className="o-node-foot">
-          <span>{n.batchId || "未绑定批次 / 队列"}</span>
-          <b>{data.inflight} 条在制</b>
-        </div>
+  const icon =
+    n.kind === "stage" ? (
+      n.platform === "human" ? (
+        <TeamOutlined aria-hidden="true" />
+      ) : n.platform === "compress" ? (
+        <ThunderboltOutlined aria-hidden="true" />
       ) : (
-        <div className="o-node-foot">
-          <span>{data.total} 条</span>
-          {data.failed ? (
-            <b className="o-failure">{data.failed} 条失败</b>
-          ) : (
-            <span>{data.ready} 条可用</span>
-          )}
-        </div>
+        <RobotOutlined aria-hidden="true" />
+      )
+    ) : (
+      icons[n.kind]
+    );
+  let status: WorkflowCardStatus = n.paused
+    ? "paused"
+    : data.failed
+      ? "error"
+      : data.pending
+        ? "running"
+        : data.total
+          ? "completed"
+          : "idle";
+  const label = n.paused
+    ? "已暂停"
+    : data.failed
+      ? `${data.failed} 条异常`
+      : n.kind === "source"
+        ? n.scanCount
+          ? "持续接收"
+          : "待启动"
+        : data.pending
+          ? "生产中"
+          : data.awaitReport
+            ? "待上报"
+            : data.inflight
+              ? "待生产"
+              : n.kind === "stage"
+                ? n.batchId
+                  ? "已绑定"
+                  : "待绑定"
+                : data.total
+                  ? "已有数据"
+                  : "等待数据";
+  const footer =
+    n.kind === "source"
+      ? "新素材自动登记"
+      : n.kind === "buffer"
+        ? "PM 确认后交接"
+        : n.kind === "sourcePool"
+          ? "项目资源储备"
+          : n.kind === "delivery"
+            ? "交付与留存"
+            : n.platform === "human"
+              ? "PM 手动上报终端"
+              : "输出进入缓冲池";
+  const actionLabel =
+    n.kind === "source"
+      ? n.scanCount
+        ? "查看来源"
+        : "开始接入"
+      : n.kind === "stage"
+        ? data.inflight
+          ? "执行节点"
+          : n.batchId
+            ? "查看批次"
+            : "绑定平台"
+        : n.kind === "delivery"
+          ? "查看交付"
+          : "查看并放行";
+  return (
+    <div className="o-card-node">
+      {n.kind !== "source" && (
+        <Handle
+          className={"wf-node-port" + (data.inputConnected ? " connected" : "")}
+          type="target"
+          position={Position.Left}
+        />
       )}
+      <WorkflowNodeCard
+        title={n.label}
+        subtitle={n.kind === "stage" ? platforms[n.platform!] : kinds[n.kind]}
+        icon={icon}
+        variant={n.kind}
+        status={status}
+        statusLabel={label}
+        selected={selected}
+        footer={footer}
+        actionLabel={actionLabel}
+        onAction={data.onAction}
+        disabled={data.disabled}
+        errorMessage={
+          data.failed
+            ? `${data.failed} 条数据需处理，点击节点查看原因`
+            : undefined
+        }
+      >
+        {n.kind === "source" ? (
+          <>
+            <WorkflowNodeParam
+              label="TOS 地址"
+              value={n.bucket || "未配置"}
+              code
+            />
+            <WorkflowNodeParam
+              label="发现次数"
+              value={`${n.scanCount || 0} 次`}
+            />
+            <WorkflowNodeParam label="接收方式" value="持续扫描 · 自动登记" />
+          </>
+        ) : n.kind === "stage" ? (
+          <>
+            <WorkflowNodeParam
+              label="批次 / 队列"
+              value={n.batchId || "尚未绑定"}
+              code
+            />
+            <WorkflowNodeMetrics
+              values={[
+                { label: "待生产", value: data.inflight },
+                { label: "累计输出", value: data.produced },
+              ]}
+            />
+          </>
+        ) : (
+          <>
+            <WorkflowNodeParam
+              label="资源集合"
+              value={data.cids || "等待首批 CID"}
+              code
+            />
+            <WorkflowNodeMetrics
+              values={[
+                {
+                  label: n.kind === "delivery" ? "交付结果" : "可放行",
+                  value: n.kind === "delivery" ? data.total : data.ready,
+                },
+                {
+                  label: data.failed ? "待处理异常" : "已交接",
+                  value: data.failed || data.consumed,
+                  danger: !!data.failed,
+                },
+              ]}
+            />
+          </>
+        )}
+      </WorkflowNodeCard>
       {n.kind !== "delivery" && (
-        <Handle type="source" position={Position.Right} />
+        <Handle
+          className={
+            "wf-node-port" + (data.outputConnected ? " connected" : "")
+          }
+          type="source"
+          position={Position.Right}
+        />
       )}
     </div>
   );
 }
-function BranchNode({data}:any){return <div className="o-branch-node"><Handle type="target" position={Position.Left}/><div className="o-branch-diamond"><BranchesOutlined aria-hidden="true"/></div><strong>分支放行</strong><span>{data.count} 个去向 · PM 选择</span><Handle type="source" position={Position.Right}/></div>}
-const nodeTypes = { orchestration: BoardNode, branch:BranchNode };
+function BranchNode({ data }: any) {
+  return (
+    <div className="o-card-node">
+      <Handle
+        type="target"
+        className="wf-node-port connected"
+        position={Position.Left}
+      />
+      <div className="wf-card wf-branch-card">
+        <header className="wf-card-header">
+          <span className="wf-icon">
+            <BranchesOutlined aria-hidden="true" />
+          </span>
+          <div className="wf-heading">
+            <h3>分支放行</h3>
+            <p>{data.count} 个下游去向</p>
+          </div>
+        </header>
+        <div className="wf-card-body">由 PM 选择范围和接收工序</div>
+        <footer className="wf-card-footer">
+          <span>手动分配</span>
+          <button
+            className="wf-card-action nodrag nopan"
+            onClick={(e) => {
+              e.stopPropagation();
+              data.onOpen?.();
+            }}
+          >
+            选择去向
+          </button>
+        </footer>
+      </div>
+      <Handle
+        type="source"
+        className="wf-node-port connected"
+        position={Position.Right}
+      />
+    </div>
+  );
+}
+const nodeTypes = { orchestration: BoardNode, branch: BranchNode };
 const rowKey = (r: ORow) => `${r.cid}:${r.rowkey}`;
 const fieldOptions = (rows: ORow[]) => [
   ...new Set([
@@ -205,6 +365,7 @@ export function OrchestrationCanvas({ businessId }: { businessId: string }) {
     [redo, setRedo] = useState<OState[]>([]);
   const [graphNodes, setGraphNodes] = useState<Node[]>([]);
   const flow = useRef<ReactFlowInstance | null>(null);
+  const [executingNode, setExecutingNode] = useState("");
   const [error, setError] = useState(""),
     [inspectorTab, setInspectorTab] = useState("operation");
   const readOnly =
@@ -268,13 +429,42 @@ export function OrchestrationCanvas({ businessId }: { businessId: string }) {
         return {
           id: n.id,
           type: "orchestration",
-          position: { x: n.x, y: n.y },
+          position: { x: n.x * 1.35, y: n.y * 1.45 },
           selected: n.id === selection,
           data: {
             node: n,
+            disabled: readOnly || busy || dirty,
+            pending: executingNode === n.id,
+            awaitReport: s.runs.some(
+              (r) => r.stageId === n.id && r.status === "awaiting-report",
+            ),
+            inputConnected: s.edges.some((e) => e.target === n.id),
+            outputConnected: s.edges.some((e) => e.source === n.id),
+            consumed: rows.filter((r) => r.status === "consumed").length,
+            produced: s.runs
+              .filter((r) => r.stageId === n.id && r.status === "completed")
+              .reduce((a, r) => a + r.outputs.length, 0),
+            onAction: () => {
+              if (n.kind === "source" && !n.scanCount) {
+                run({ type: "scan", sourceId: n.id });
+              } else if (
+                n.kind === "stage" &&
+                s.runs.some((r) => r.stageId === n.id && r.status === "queued")
+              ) {
+                run({ type: "execute", stageId: n.id });
+              } else {
+                setSelection(n.id);
+                setInspectorTab("operation");
+              }
+            },
             total: rows.length,
             ready: availableRows(s, n.id).length,
-            failed: rows.filter((r) => r.status === "failed").length,
+            failed: (n.kind === "stage"
+              ? s.runs
+                  .filter((r) => r.stageId === n.id)
+                  .flatMap((r) => r.outputs)
+              : rows
+            ).filter((r) => r.status === "failed").length,
             cids: nodeCids(s, n.id)
               .map((c) => c.id)
               .join(" + "),
@@ -284,15 +474,57 @@ export function OrchestrationCanvas({ businessId }: { businessId: string }) {
           },
         };
       }),
-    [s, selection],
+    [s, selection, busy, readOnly, dirty, executingNode],
   );
-  const branchPools=useMemo(()=>s.nodes.filter(n=>['sourcePool','buffer'].includes(n.kind)&&s.edges.filter(e=>e.source===n.id).length>1),[s]);
-  const branchNodes=useMemo(()=>branchPools.map(n=>({id:'branch:'+n.id,type:'branch',position:{x:n.x+70,y:n.y-140},draggable:false,connectable:false,data:{owner:n.id,count:s.edges.filter(e=>e.source===n.id).length}})),[branchPools,s]);
-  const displayNodes=useMemo(()=>[...graphData,...branchNodes],[graphData,branchNodes]);
-  const displayEdges=useMemo(()=>[
-    ...s.edges.map(e=>({...e,source:branchPools.some(n=>n.id===e.source)?'branch:'+e.source:e.source})),
-    ...branchPools.map(n=>({id:'branch-link:'+n.id,source:n.id,target:'branch:'+n.id,label:'PM 选择范围'}))
-  ],[s,branchPools]);
+  const branchPools = useMemo(
+    () =>
+      s.nodes.filter(
+        (n) =>
+          ["sourcePool", "buffer"].includes(n.kind) &&
+          s.edges.filter((e) => e.source === n.id).length > 1,
+      ),
+    [s],
+  );
+  const branchNodes = useMemo(
+    () =>
+      branchPools.map((n) => ({
+        id: "branch:" + n.id,
+        type: "branch",
+        position: { x: n.x * 1.35 + 40, y: n.y * 1.45 - 190 },
+        draggable: false,
+        connectable: false,
+        data: {
+          onOpen: () => {
+            setSelection(n.id);
+            setInspectorTab("operation");
+          },
+          owner: n.id,
+          count: s.edges.filter((e) => e.source === n.id).length,
+        },
+      })),
+    [branchPools, s],
+  );
+  const displayNodes = useMemo(
+    () => [...graphData, ...branchNodes],
+    [graphData, branchNodes],
+  );
+  const displayEdges = useMemo(
+    () => [
+      ...s.edges.map((e) => ({
+        ...e,
+        source: branchPools.some((n) => n.id === e.source)
+          ? "branch:" + e.source
+          : e.source,
+      })),
+      ...branchPools.map((n) => ({
+        id: "branch-link:" + n.id,
+        source: n.id,
+        target: "branch:" + n.id,
+        label: "PM 选择范围",
+      })),
+    ],
+    [s, branchPools],
+  );
   useEffect(() => setGraphNodes(displayNodes), [displayNodes]);
   const graphEdit = (action: OAction) => {
     if (readOnly) return;
@@ -324,6 +556,13 @@ export function OrchestrationCanvas({ businessId }: { businessId: string }) {
     }
     try {
       setError("");
+      setExecutingNode(
+        "stageId" in action
+          ? action.stageId
+          : "sourceId" in action
+            ? action.sourceId
+            : "",
+      );
       await command("orchestration.apply", {
         businessId,
         action,
@@ -332,6 +571,8 @@ export function OrchestrationCanvas({ businessId }: { businessId: string }) {
     } catch (e) {
       setError((e as Error).message);
       throw e;
+    } finally {
+      setExecutingNode("");
     }
   }
   const run = (a: OAction) => void act(a).catch(() => undefined);
@@ -340,7 +581,7 @@ export function OrchestrationCanvas({ businessId }: { businessId: string }) {
     setInspectorTab("operation");
     const n = s.nodes.find((n) => n.id === nodeId);
     if (n)
-      flow.current?.setCenter(n.x + 100, n.y + 70, {
+      flow.current?.setCenter(n.x * 1.35 + 140, n.y * 1.45 + 110, {
         zoom: 0.8,
         duration: 250,
       });
@@ -541,7 +782,7 @@ export function OrchestrationCanvas({ businessId }: { businessId: string }) {
             nodes={graphNodes}
             edges={displayEdges.map((e) => ({
               ...e,
-              type: "smoothstep",
+              type: "default",
               label: e.label,
               markerEnd: {
                 type: MarkerType.ArrowClosed,
@@ -553,7 +794,7 @@ export function OrchestrationCanvas({ businessId }: { businessId: string }) {
             nodeTypes={nodeTypes}
             minZoom={0.2}
             maxZoom={1.6}
-            defaultViewport={{ x: 32, y: -40, zoom: 0.8 }}
+            defaultViewport={{ x: 32, y: -70, zoom: 0.85 }}
             onInit={(instance) => {
               flow.current = instance;
             }}
@@ -561,16 +802,17 @@ export function OrchestrationCanvas({ businessId }: { businessId: string }) {
             nodesConnectable={!readOnly}
             deleteKeyCode={null}
             onNodeClick={(_, n) => {
-              setSelection(n.id.startsWith("branch:")?n.id.slice(7):n.id);
+              setSelection(n.id.startsWith("branch:") ? n.id.slice(7) : n.id);
               setInspectorTab("operation");
             }}
             onPaneClick={() => setSelection("")}
             onNodeDragStop={(_, n) =>
-              !n.id.startsWith("branch:") && graphEdit({
+              !n.id.startsWith("branch:") &&
+              graphEdit({
                 type: "move",
                 nodeId: n.id,
-                x: n.position.x,
-                y: n.position.y,
+                x: n.position.x / 1.35,
+                y: n.position.y / 1.45,
               })
             }
             onNodesChange={(changes) =>
@@ -600,7 +842,10 @@ export function OrchestrationCanvas({ businessId }: { businessId: string }) {
               modal.confirm({
                 title: "移除这条交接关系？",
                 content: "历史批次和数据记录会保留。",
-                onOk: () => {if(!e.id.startsWith("branch-link:"))graphEdit({ type: "disconnect", edgeId: e.id });},
+                onOk: () => {
+                  if (!e.id.startsWith("branch-link:"))
+                    graphEdit({ type: "disconnect", edgeId: e.id });
+                },
               })
             }
             onDragOver={(e) => {
@@ -619,7 +864,7 @@ export function OrchestrationCanvas({ businessId }: { businessId: string }) {
               });
               setAddKind(kind);
               setAddName(kinds[kind]);
-              setAddPosition(p);
+              setAddPosition({ x: p.x / 1.35, y: p.y / 1.45 });
               setAdd(true);
             }}
           >
@@ -629,16 +874,37 @@ export function OrchestrationCanvas({ businessId }: { businessId: string }) {
               pannable
               zoomable
               nodeColor={(n) =>
-                (n.data.node as ONode|undefined)?.kind === "delivery"
+                (n.data.node as ONode | undefined)?.kind === "delivery"
                   ? "#cfdfd4"
-                  : (n.data.node as ONode|undefined)?.kind === "buffer"
+                  : (n.data.node as ONode | undefined)?.kind === "buffer"
                     ? "#dce7f3"
                     : "#e5e9ee"
               }
               maskColor="rgba(247,249,251,.65)"
             />
           </ReactFlow>
-          <div className="o-node-legend"><span><DatabaseOutlined aria-hidden="true"/>资源储备池</span><span><InboxOutlined aria-hidden="true"/>缓冲池</span><span><ApartmentOutlined aria-hidden="true"/>生产工序</span><span><BranchesOutlined aria-hidden="true"/>分支放行</span><span><CheckCircleOutlined aria-hidden="true"/>交付池</span></div>
+          <div className="o-node-legend">
+            <span>
+              <DatabaseOutlined aria-hidden="true" />
+              资源储备池
+            </span>
+            <span>
+              <InboxOutlined aria-hidden="true" />
+              缓冲池
+            </span>
+            <span>
+              <ApartmentOutlined aria-hidden="true" />
+              生产工序
+            </span>
+            <span>
+              <BranchesOutlined aria-hidden="true" />
+              分支放行
+            </span>
+            <span>
+              <CheckCircleOutlined aria-hidden="true" />
+              交付池
+            </span>
+          </div>
           <div className="o-plane-caption">
             拖动节点 · 从圆点连线 · 双击连线移除 · 数据始终单向流转
           </div>
