@@ -1,0 +1,180 @@
+.pull-workspace {
+  border: 1px solid #dce4eb;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+.pull-toolbar {
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid #e9eef2;
+}
+.pull-help {
+  color: #667b8e;
+  font-size: 12px;
+  padding: 0 16px;
+}
+.pull-canvas-row {
+  display: flex;
+  min-height: 530px;
+}
+.pull-palette {
+  width: 166px;
+  padding: 16px 12px;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8ef;
+  display: flex;
+  gap: 9px;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+.pull-palette small {
+  color: #7f8b98;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.pull-palette button {
+  white-space: normal;
+}
+.pull-canvas {
+  flex: 1;
+  min-width: 0;
+  height: 550px;
+  background: #f6f9fc;
+}
+.pull-workspace .react-flow__node-default {
+  border: 1px solid #90abc2;
+  border-radius: 8px;
+  padding: 0;
+  background: #f5f9fd;
+  box-shadow: 0 2px 5px #20374f0a;
+  overflow: visible;
+}
+.pull-workspace .react-flow__node.selected {
+  border: 2px solid #356b91;
+}
+.pull-node,
+.pull-stage {
+  text-align: left;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pull-node strong,
+.pull-stage strong {
+  font-size: 15px;
+  color: #2c485e;
+}
+.pull-node small,
+.pull-stage small,
+.pull-stage span {
+  font-size: 12px;
+  color: #6c7f8f;
+}
+.pull-node .ant-tag {
+  margin-bottom: 4px;
+}
+.pull-node-counts {
+  display: flex;
+  justify-content: space-between;
+  color: #6c7f8f;
+  font-size: 12px;
+}
+.pull-node-counts b {
+  font-size: 16px;
+  color: #375d76;
+}
+.pull-stage {
+  background: #fff;
+  border-radius: 8px;
+}
+.pull-footer {
+  padding: 12px 16px;
+  font-size: 12px;
+  color: #6b7e8d;
+}
+.pull-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 20px 0;
+}
+.pull-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #516675;
+  font-size: 12px;
+}
+.pull-form .ant-checkbox-wrapper {
+  grid-column: 1/-1;
+}
+.pull-rule {
+  display: flex;
+  margin: 12px 0;
+  flex-wrap: wrap;
+}
+.pull-platform {
+  padding: 24px;
+  max-width: 1100px;
+  margin: auto;
+}
+.pull-platform header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.pull-platform .ant-card {
+  margin: 16px 0;
+}
+@media (max-width: 700px) {
+  .pull-palette {
+    width: 120px;
+    padding: 10px 6px;
+  }
+  .pull-form {
+    grid-template-columns: 1fr;
+  }
+  .pull-toolbar {
+    padding: 10px;
+  }
+  .pull-canvas {
+    height: 480px;
+  }
+  .pull-platform {
+    padding: 12px;
+  }
+}
+.pull-workspace.is-expanded {
+  position: fixed;
+  inset: 14px;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 60px #1c35534d;
+}
+.pull-workspace.is-expanded .pull-canvas-row {
+  flex: 1;
+  min-height: 0;
+}
+.pull-workspace.is-expanded .pull-canvas {
+  height: 100%;
+}
+
+.pull-workspace .pull-business-group {
+  background: #eef3f9; border: 2px solid #bacadd; border-radius: 14px;
+  color: #304b67; padding: 14px 20px; text-align: left;
+  box-shadow: none;
+}
+.pull-business-group .react-flow__handle { visibility: hidden; }
+.pull-workspace .pull-router-card { border: 2px solid #8863b7; background: #faf6ff; }
+.pull-workspace .pull-platform-card { border: 1px solid #6488af; background: #fff; }
+.pull-routing-settings { padding: 14px; margin: 16px 0; border: 1px solid #d8c5ec; background:#faf7fe; border-radius:8px; }
+.pull-weight { display:flex; align-items:center; justify-content:space-between; margin:10px 0; }
+.pull-result-query { margin:20px 0; }
+.pull-result-query summary { cursor:pointer; font-weight:600; margin-bottom:12px; }

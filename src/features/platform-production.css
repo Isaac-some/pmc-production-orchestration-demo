@@ -1,0 +1,346 @@
+/* Measured from the deployed production module CSSOM, not approximation. */
+.platform-production {
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid #e4e9ed;
+  border-radius: 6px;
+  background: #fff;
+}
+.platform-production .ant-tabs {
+  margin-top: 2px;
+}
+.platform-production .ant-tabs-nav {
+  margin-bottom: 9px;
+}
+.platform-production .ant-tabs-tab {
+  min-height: 40px;
+  padding: 9px 13px;
+}
+.platform-production .ant-tabs-tab + .ant-tabs-tab {
+  margin-left: 24px;
+}
+.platform-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #4b5963;
+  font-size: 13px;
+  line-height: 20px;
+}
+.platform-production .ant-tabs-tab-active .platform-tab-label {
+  color: #477eaf;
+  font-weight: 600;
+}
+.platform-production .ant-tabs-ink-bar {
+  height: 2px;
+}
+.platform-production .ant-tabs-extra-content {
+  display: flex;
+  align-items: center;
+}
+.platform-production .ant-tabs-content-holder {
+  display: none;
+}
+.platform-production .ant-tabs-extra-content .ant-btn,
+.platform-empty .ant-btn {
+  min-height: 34px;
+  padding-inline: 12px;
+  font-size: 12px;
+  font-weight: 550;
+}
+.platform-production .ant-segmented {
+  min-height: 34px;
+  padding: 3px;
+  font-size: 12px;
+}
+.platform-production .ant-table-wrapper {
+  margin-inline: -2px;
+}
+.platform-production .ant-table-thead > tr > th {
+  color: #52606d;
+  background: #f7f9fc;
+  font-size: 12px;
+  font-weight: 600;
+}
+.platform-production .ant-table-tbody > tr > td {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  font-size: 12px;
+}
+.platform-production .ant-table .ant-btn {
+  font-size: 14px;
+  padding-inline: 4px;
+}
+.platform-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+.platform-task-card.ant-card {
+  min-width: 0;
+  overflow: hidden;
+  border-width: 1px 1px 1px 4px;
+  border-style: solid;
+  border-color: #dbe6ef #dbe6ef #dbe6ef #477eaf;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(31, 56, 78, 0.05);
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s,
+    transform 0.2s;
+}
+.platform-task-card.ant-card:hover {
+  border-color: #b2c9dc;
+  box-shadow: 0 8px 20px rgba(31, 56, 78, 0.1);
+  transform: translateY(-1px);
+}
+.platform-task-card.ant-card .ant-card-head {
+  min-height: 48px;
+  padding: 0 14px;
+  border-bottom-color: #edf2f6;
+  background: #f8fbfe;
+  box-shadow: 0 -1px inset rgba(219, 230, 239, 0.45);
+}
+.platform-task-card.ant-card .ant-card-head-title {
+  min-width: 0;
+  padding: 12px 0;
+  overflow: hidden;
+  color: #17202a;
+  font-size: 14px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.platform-task-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.platform-task-card.ant-card .ant-card-extra {
+  padding: 12px 0;
+}
+.platform-task-card.ant-card .ant-card-extra .ant-tag {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+.platform-card-type {
+  padding: 2px 7px;
+  border: 1px solid #d7e7f5;
+  border-radius: 10px;
+  color: #477eaf;
+  background: #f1f7fc;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+}
+.platform-task-card.ant-card .ant-card-body {
+  display: flex;
+  min-height: 142px;
+  padding: 12px 14px 10px;
+  flex-direction: column;
+}
+.platform-task-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.platform-task-body dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 10px;
+  margin: 0;
+  font-size: 12px;
+  color: #71808a;
+}
+.platform-task-body dt {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+}
+.platform-task-body dd {
+  min-width: 0;
+  margin: 0;
+  padding: 2px 7px;
+  color: #40566f;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 18.8571px;
+}
+.platform-task-body p {
+  display: -webkit-box;
+  min-height: 38px;
+  margin: 7px 0 0;
+  overflow: hidden;
+  color: #71808a;
+  font-size: 12px;
+  line-height: 18px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.platform-task-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-height: 32px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid #f2f4f6;
+}
+.platform-task-card footer .ant-space {
+  gap: 6px !important;
+}
+.platform-task-card footer .ant-btn {
+  min-width: 88px;
+  height: 30px;
+  padding-inline: 10px;
+  font-size: 12px;
+}
+.platform-task-card footer .ant-btn-primary {
+  box-shadow: none;
+  font-weight: 550;
+}
+.platform-empty {
+  display: flex;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+}
+.platform-empty .ant-empty {
+  margin: 0;
+}
+.platform-form-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 1fr);
+  column-gap: 16px;
+}
+.platform-machine-modal .ant-modal-content {
+  padding: 20px 24px 18px;
+}
+.platform-machine-modal .ant-modal-body {
+  padding-top: 6px;
+}
+.platform-role-block {
+  grid-column: 1/-1;
+  margin-top: 4px;
+}
+.platform-role-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 6px 0 8px;
+  color: #477eaf;
+  font-size: 18px;
+}
+.platform-role-header strong {
+  flex: 0 0 auto;
+  align-self: center;
+  color: #1f1f1f;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+}
+.platform-role-help {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8d9aa5;
+  font-size: 14px;
+  cursor: pointer;
+}
+.platform-permission {
+  width: min(520px, calc(100vw - 64px));
+}
+.platform-permission > p {
+  margin: 0 0 12px;
+  color: #263442;
+  font-size: 13px;
+  line-height: 20px;
+}
+.platform-permission > strong {
+  display: block;
+  margin-bottom: 10px;
+  color: #263442;
+  font-size: 14px;
+}
+.platform-permission > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 20px;
+}
+.platform-permission > div > span {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: #687681;
+  font-size: 13px;
+  line-height: 20px;
+}
+.platform-permission .anticon {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  color: #477eaf;
+}
+.platform-simulation {
+  font-size: 12px;
+  color: #71808a;
+}
+@media (max-width: 720px) {
+  .platform-form-pair {
+    grid-template-columns: 1fr;
+  }
+  .platform-production .ant-tabs-tab {
+    padding-inline: 9px;
+  }
+  .platform-tab-label {
+    font-size: 12px;
+  }
+}
+@media (max-width: 680px) {
+  .platform-cards {
+    grid-template-columns: 1fr;
+  }
+}
+.platform-task-body dl {
+  margin-bottom: 4px;
+}
+.platform-machine-form {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 1fr);
+  column-gap: 16px;
+}
+.platform-machine-form .platform-form-pair {
+  display: contents;
+}
+.platform-production .ant-tag-gold {
+  color: #9b6a2c;
+  background: #f7f0e7;
+  border-color: transparent;
+  border-radius: 2px;
+}
+@media (max-width: 720px) {
+  .platform-machine-form {
+    grid-template-columns: 1fr;
+  }
+}
+.platform-production .ant-table {
+  font-size: 12px;
+  line-height: 18.8571px;
+}
