@@ -57,7 +57,7 @@ import {
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import * as XLSX from "xlsx";
+
 import { usePMC } from "../api";
 import { ProductionPanel } from "./production";
 import { RiskPanel, RiskLedger } from "./risk";
@@ -1264,6 +1264,7 @@ export function ImportPage() {
       if (/\.csv$/i.test(file.name)) {
         ({ headers, rows } = parseImportCSV(await file.text()));
       } else {
+        const XLSX = await import("xlsx");
         const wb = XLSX.read(await file.arrayBuffer(), {
           type: "array",
           cellDates: false,

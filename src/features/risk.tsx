@@ -41,7 +41,7 @@ import {
 } from "antd";
 import "./risk.css";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import * as XLSX from "xlsx";
+
 import { usePMC } from "../api";
 import { Files } from "../components/Files";
 import {
@@ -854,7 +854,8 @@ export function RiskLedger({
       (r) => r.id === detail && (!businessId || r.businessId === businessId),
     ),
     readonly = user.role === "viewer";
-  const exportRows = () => {
+  const exportRows = async () => {
+    const XLSX = await import("xlsx");
     const sheet = XLSX.utils.json_to_sheet(
       rows.map((r) => ({
         风险ID: r.id,

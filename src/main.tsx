@@ -26,7 +26,7 @@ createRoot(document.getElementById("root")!).render(
           colorBorder: "#e4e9ed",
           colorBgLayout: "#f6f8fa",
           borderRadius: 6,
-          fontFamily: 'Inter,-apple-system,system-ui,"Segoe UI",sans-serif',
+          fontFamily: '-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",system-ui,sans-serif',
         },
         components: {
           Button: { controlHeight: 32 },

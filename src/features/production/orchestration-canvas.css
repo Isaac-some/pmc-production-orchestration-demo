@@ -270,7 +270,7 @@
   font-size: 12px;
   line-height: 20px;
 }
-.o-inspector label {
+.o-inspector label:not(.ant-checkbox-wrapper) {
   display: block;
   margin: 0 0 8px;
   font-size: 13px;
@@ -504,3 +504,5 @@
 
 
 .o-card-node{position:relative;width:max-content}.o-node-legend{position:absolute;left:16px;bottom:38px;z-index:4;display:flex;gap:14px;font-size:11px;color:#596b7e;background:#f8fafc;padding:4px 8px;border-radius:4px;flex-wrap:wrap;pointer-events:none}.o-node-legend span{display:flex;gap:5px;align-items:center}
+
+.o-delivery-cids > .ant-checkbox-wrapper {display:flex;align-items:center;}

@@ -1,0 +1,18 @@
+/* Real PMC modal tokens, measured 2026-11-22; batch section is a local POC extension. */
+.human-platform-prototype { --human-ink:#263442; --human-muted:#687681; --human-surface:#f6f8fa; --human-rule:#e4e9ed; color:var(--human-ink); }
+.human-platform-prototype .ant-modal-content { padding:20px 24px; border-radius:8px; }
+.human-platform-prototype .ant-modal-title { font-size:16px; line-height:24px; font-weight:600; }
+.human-platform-prototype .ant-modal-body { max-height:calc(100dvh - 240px); overflow-y:auto; }
+.human-platform-prototype .ant-modal-footer { margin-top:24px; }
+.human-platform-prototype .ant-form-item { margin-bottom:20px; }
+.human-platform-prototype .ant-form-item-label { padding-bottom:8px; }
+.human-platform-prototype .ant-input { font-size:14px; line-height:22px; }
+.human-prototype-context { margin:0 0 16px; font-size:12px; color:var(--human-muted); }
+.human-batch-panel { display:flex; flex-direction:column; gap:20px; padding-top:8px; }
+.human-project-summary { display:flex; justify-content:space-between; align-items:center; gap:16px; }
+.human-project-summary>div { display:flex; flex-direction:column; gap:4px; }
+.human-project-summary span { font-size:12px; color:var(--human-muted); }
+.human-binding-preview { display:flex; align-items:flex-start; gap:12px; padding:16px; background:var(--human-surface); border:1px solid var(--human-rule); border-radius:6px; }
+.human-binding-preview>.anticon { font-size:18px; margin-top:2px; color:#4f8064; }
+.human-binding-preview p { margin:4px 0 0; font-size:12px; line-height:20px; color:var(--human-muted); }
+@media(max-height:700px) { .human-platform-prototype { top:24px!important; } .human-platform-prototype .ant-modal-body { max-height:calc(100dvh - 160px); } }

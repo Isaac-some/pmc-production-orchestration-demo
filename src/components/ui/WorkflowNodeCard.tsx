@@ -2,7 +2,8 @@ import React, { forwardRef, useId, type ReactNode } from "react";
 import {
   CheckOutlined,
   ExclamationCircleOutlined,
-  MoreOutlined,
+  LockOutlined,
+  ExportOutlined,
   PlayCircleOutlined,
   ArrowRightOutlined,
 } from "@ant-design/icons";
@@ -48,6 +49,8 @@ export const WorkflowNodeCard = forwardRef<
   ref,
 ) {
   const titleId = useId();
+  const isPool = variant === "sourcePool" || variant === "buffer";
+  const FooterIcon = isPool ? LockOutlined : variant === "delivery" ? ExportOutlined : ArrowRightOutlined;
   return (
     <div
       ref={ref}
@@ -57,7 +60,7 @@ export const WorkflowNodeCard = forwardRef<
       aria-labelledby={titleId}
     >
       <header className="wf-card-header">
-        <span className="wf-icon">{icon}</span>
+        <span className="wf-icon" aria-hidden="true">{icon}</span>
         <div className="wf-heading">
           <h3 id={titleId} title={title}>
             {title}
@@ -83,7 +86,7 @@ export const WorkflowNodeCard = forwardRef<
         </div>
       )}
       <footer className="wf-card-footer">
-        <span title={footer}>{footer}</span>
+        <span title={footer} className="wf-footer-context"><FooterIcon aria-hidden="true" />{footer}</span>
         <button
           type="button"
           className="nodrag nopan wf-card-action"
@@ -93,7 +96,7 @@ export const WorkflowNodeCard = forwardRef<
             onAction?.();
           }}
         >
-          {status === "running" ? (
+          {status === "running" && variant === "stage" ? (
             <PlayCircleOutlined aria-hidden="true" />
           ) : (
             <ArrowRightOutlined aria-hidden="true" />
@@ -130,8 +133,13 @@ export function WorkflowNodeMetrics({
       {values.map((v) => (
         <div key={v.label}>
           <span>{v.label}</span>
-          <strong className={v.danger ? "wf-danger" : ""}>
-            {v.value.toLocaleString("zh-CN")}
+          <strong
+            className={v.danger ? "wf-danger" : ""}
+            title={`${v.value.toLocaleString("zh-CN")} 条`}
+          >
+            {v.value >= 10000
+              ? new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 }).format(v.value)
+              : v.value.toLocaleString("zh-CN")}
             <small>条</small>
           </strong>
         </div>

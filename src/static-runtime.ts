@@ -84,6 +84,10 @@ function validState(value: unknown): value is State {
 
 function persist(s: State): void {
   try {
+    // Prototype ledger retains recent operations; data files stay in their platforms.
+    s.audit = s.audit.slice(-200);
+    if (s.drafts["production-plan:motion-poc"]?.schema === 2)
+      delete s.drafts["orchestration:motion-poc"];
     localStorage.setItem(PUBLIC_DEMO_STORAGE_KEY, JSON.stringify(s));
   } catch (error) {
     if (error instanceof DOMException && error.name === "QuotaExceededError") {

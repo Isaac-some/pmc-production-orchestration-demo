@@ -35,7 +35,7 @@ import {
 import { DeliveryPanel } from "./Delivery";
 import { FlowBoard, type BoardSelection } from "./FlowBoard";
 import { CanvasReview } from "./CanvasReview";
-import { OrchestrationCanvas } from "./OrchestrationCanvas";
+import { BatchOrchestration } from "./BatchOrchestration";
 import {
   experienceSignals,
   nodeMeasure,
@@ -320,7 +320,7 @@ export function ProductionExperience({
       className={`${embedded ? "experience experience-embedded" : "experience"}${canvasFocus ? " canvas-focus-mode" : ""}`}
       data-production-dirty={dirty ? "true" : "false"}
     >
-      <header className="experience-header">
+      {view !== "canvas" && <header className="experience-header">
         <div>
           <span className="experience-section-label">生产编排</span>
           <h2>生产与交付</h2>
@@ -336,7 +336,7 @@ export function ProductionExperience({
             截止 <b>{b.deadline || "待确定"}</b>
           </span>
         </div>
-      </header>
+      </header>}
       <nav className="experience-nav" aria-label="生产工作视图">
         <div role="tablist">
           <button
@@ -728,7 +728,7 @@ export function ProductionExperience({
       )}
       {(view === "canvas" || canvasVisited) && (
         <div style={{ display: view === "canvas" ? "block" : "none" }}>
-          <OrchestrationCanvas businessId={businessId} />
+          <BatchOrchestration businessId={businessId} />
         </div>
       )}
       {view === "delivery" && (

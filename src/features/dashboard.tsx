@@ -2,7 +2,7 @@
 import React, { useEffect, useRef } from "react";
 import { Tooltip } from "antd";
 import { QuestionCircleOutlined } from "@ant-design/icons";
-import * as echarts from "echarts";
+import type * as echarts from "echarts";
 import { useNavigate } from "react-router-dom";
 import { usePMC } from "../api";
 import { displayProjectRisk } from "../../shared/reports";
@@ -42,15 +42,18 @@ export function Chart({
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!ref.current) return;
+    let cancelled = false;
+    let dispose: (() => void) | undefined;
+    void import("echarts").then(echarts => {
+    if (cancelled || !ref.current) return;
     const chart = echarts.init(ref.current);
     chart.setOption(option);
     chart.on("click", (e: any) => onSelect?.(e.name));
     const observer = new ResizeObserver(() => chart.resize());
     observer.observe(ref.current);
-    return () => {
-      observer.disconnect();
-      chart.dispose();
-    };
+    dispose = () => { observer.disconnect(); chart.dispose(); };
+    });
+    return () => { cancelled = true; dispose?.(); };
   }, [option, onSelect]);
   return (
     <div ref={ref} className="platform-chart" role="img" aria-label={label} />

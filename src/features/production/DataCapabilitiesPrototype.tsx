@@ -24,7 +24,7 @@ import {
   RightOutlined,
   TeamOutlined,
 } from "@ant-design/icons";
-import * as XLSX from "xlsx";
+
 import "./data-capabilities-prototype.css";
 
 type Row = {
@@ -80,7 +80,8 @@ function download(
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-function downloadCSV(name: string, rows: Row[]) {
+async function downloadCSV(name: string, rows: Row[]) {
+  const XLSX = await import("xlsx");
   download(
     name,
     "\ufeff" +
@@ -203,6 +204,7 @@ export function DataCapabilitiesPrototype({
   };
   const readReturn = async (file: File) => {
     try {
+      const XLSX = await import("xlsx");
       const book = XLSX.read(await file.arrayBuffer(), { type: "array" });
       validateRows(
         XLSX.utils.sheet_to_json<Row>(book.Sheets[book.SheetNames[0]], {

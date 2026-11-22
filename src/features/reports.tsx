@@ -28,7 +28,7 @@ import {
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import * as XLSX from "xlsx";
+
 import { usePMC } from "../api";
 import { day, stageNames } from "../../shared/types";
 import {
@@ -247,7 +247,8 @@ export function ReportsPage({ history = false }: { history?: boolean }) {
           },
         ];
   const count = groups.reduce((n, g) => n + g.rows.length, 0);
-  function csv(bs: any[], title: string, format: "csv" | "xlsx" = "csv") {
+  async function csv(bs: any[], title: string, format: "csv" | "xlsx" = "csv") {
+    const XLSX = await import("xlsx");
     const values = reportExportTable(bs, kind, { start, end, merged });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(

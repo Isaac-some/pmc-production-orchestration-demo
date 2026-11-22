@@ -38,6 +38,7 @@ import {
   TableOutlined,
 } from "@ant-design/icons";
 import { usePMC } from "../api";
+import { useSearchParams } from "react-router-dom";
 import {
   productionData,
   type PlatformTask,
@@ -86,6 +87,7 @@ export function PlatformProductionPanel({
 }: {
   businessId: string;
 }) {
+  const [params,setParams] = useSearchParams();
   const { state, user, command, refresh, busy } = usePMC(),
     { message } = App.useApp(),
     b = state.businesses.find((b) => b.id === businessId)!,
@@ -184,11 +186,12 @@ export function PlatformProductionPanel({
         type={card ? "primary" : "link"}
         icon={card ? <ArrowRightOutlined /> : <ExportOutlined />}
         onClick={() => {
-          setOperation(c.action);
-          setDetail(t);
+          const next = new URLSearchParams(params);
+          next.set("tab", "orchestration");
+          setParams(next);
         }}
       >
-        {c.action}
+        {c.action === "去标注" ? "进入编排 · 去标注" : c.action}
       </Button>
     </Space>
   );
