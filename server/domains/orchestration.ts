@@ -1,4 +1,4 @@
-import {createPlan,applyPlan} from "../../shared/production-plan";
+import { createPlan, applyPlan } from "../../shared/production-plan";
 import {
   createPOC,
   transition,
@@ -37,10 +37,18 @@ export function handleOrchestration(state: State, cmd: Command, ctx: Context) {
   if (cmd.type === "orchestration.plan") {
     const key = `production-plan:${business.id}`;
     const current = state.drafts[key] || createPlan();
-    requireValue(p.canvasRevision === current.revision, "编排已更新，请刷新后重试");
+    requireValue(
+      p.canvasRevision === current.revision,
+      "编排已更新，请刷新后重试",
+    );
     state.drafts[key] = applyPlan(current, p.action);
-    record(state, ctx, "批次生产编排", state.drafts[key].events.at(-1)?.detail || p.action.type);
-    return {canvas: state.drafts[key]};
+    record(
+      state,
+      ctx,
+      "批次生产编排",
+      state.drafts[key].events.at(-1)?.detail || p.action.type,
+    );
+    return { canvas: state.drafts[key] };
   }
   const key = `orchestration:${business.id}`;
   const current: OState = state.drafts[key] || createPOC(business.id);

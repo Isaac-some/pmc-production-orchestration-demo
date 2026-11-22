@@ -44,16 +44,22 @@ export function Chart({
     if (!ref.current) return;
     let cancelled = false;
     let dispose: (() => void) | undefined;
-    void import("echarts").then(echarts => {
-    if (cancelled || !ref.current) return;
-    const chart = echarts.init(ref.current);
-    chart.setOption(option);
-    chart.on("click", (e: any) => onSelect?.(e.name));
-    const observer = new ResizeObserver(() => chart.resize());
-    observer.observe(ref.current);
-    dispose = () => { observer.disconnect(); chart.dispose(); };
+    void import("echarts").then((echarts) => {
+      if (cancelled || !ref.current) return;
+      const chart = echarts.init(ref.current);
+      chart.setOption(option);
+      chart.on("click", (e: any) => onSelect?.(e.name));
+      const observer = new ResizeObserver(() => chart.resize());
+      observer.observe(ref.current);
+      dispose = () => {
+        observer.disconnect();
+        chart.dispose();
+      };
     });
-    return () => { cancelled = true; dispose?.(); };
+    return () => {
+      cancelled = true;
+      dispose?.();
+    };
   }, [option, onSelect]);
   return (
     <div ref={ref} className="platform-chart" role="img" aria-label={label} />

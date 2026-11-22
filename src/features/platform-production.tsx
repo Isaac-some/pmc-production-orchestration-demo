@@ -87,7 +87,7 @@ export function PlatformProductionPanel({
 }: {
   businessId: string;
 }) {
-  const [params,setParams] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const { state, user, command, refresh, busy } = usePMC(),
     { message } = App.useApp(),
     b = state.businesses.find((b) => b.id === businessId)!,

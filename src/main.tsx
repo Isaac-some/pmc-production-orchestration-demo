@@ -23,6 +23,7 @@ createRoot(document.getElementById("root")!).render(
           colorError: "#b55255",
           colorText: "#263442",
           colorTextSecondary: "#687681",
+          colorTextPlaceholder: "#687681",
           colorBorder: "#e4e9ed",
           colorBgLayout: "#f6f8fa",
           borderRadius: 6,
