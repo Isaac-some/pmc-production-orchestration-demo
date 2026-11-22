@@ -161,6 +161,63 @@ export function createPlan(): ProductionPlan {
     rules: {},
   };
 }
+/** Bindings control future dispatch; historical batch facts remain after unbinding. */
+export function planBatches(p: ProductionPlan) {
+  return p.nodes
+    .filter((n) => n.kind === "stage")
+    .flatMap((n) => {
+      const bindings =
+        n.bindings ||
+        (n.executorId
+          ? [{ executorId: n.executorId, batchIds: n.batchIds || [], at: "" }]
+          : []);
+      const identities = new Map<
+        string,
+        { executorId: string; batchId: string; bound: boolean }
+      >();
+      for (const b of bindings)
+        for (const batchId of b.batchIds)
+          identities.set(JSON.stringify([b.executorId, batchId]), {
+            executorId: b.executorId,
+            batchId,
+            bound: true,
+          });
+      for (const l of p.lots.filter((l) => l.nodeId === n.id && l.executorId))
+        for (const batchId of l.batchIds || []) {
+          const key = JSON.stringify([l.executorId, batchId]);
+          if (!identities.has(key))
+            identities.set(key, {
+              executorId: l.executorId!,
+              batchId,
+              bound: false,
+            });
+        }
+      return [...identities.values()].map((b) => {
+        const records = p.lots.filter(
+          (l) =>
+            l.nodeId === n.id &&
+            l.executorId === b.executorId &&
+            l.batchIds?.includes(b.batchId),
+        );
+        return {
+          key: JSON.stringify([n.id, b.executorId, b.batchId]),
+          nodeId: n.id,
+          node: n.label,
+          ...b,
+          input: records.reduce((s, l) => s + l.quantity, 0),
+          running: records
+            .filter((l) => l.state === "running")
+            .reduce((s, l) => s + l.quantity, 0),
+          failed: records
+            .filter((l) => l.state === "failed")
+            .reduce((s, l) => s + l.quantity, 0),
+          completed: records
+            .filter((l) => l.state === "available" && l.remaining === 0)
+            .reduce((s, l) => s + l.quantity, 0),
+        };
+      });
+    });
+}
 export const stock = (p: ProductionPlan, id: string) =>
   p.lots
     .filter((l) => l.nodeId === id && l.state === "available")

@@ -40,6 +40,7 @@ import {
   stock,
   planRisks,
   planSignals,
+  planBatches,
   type ProductionPlan,
   type PlanNode,
   type PlanAction,
@@ -146,7 +147,7 @@ function PlanCard({ data }: any) {
         {n.kind === "stage" && (
           <WorkflowNodeParam
             label="执行器 / 生产批次"
-            value={`${(n.bindings || []).length || (n.executorId ? 1 : 0)} 个 / ${new Set((n.bindings || []).flatMap((b) => b.batchIds)).size || n.batchIds?.length || 0} 批`}
+            value={`${(n.bindings || []).length || (n.executorId ? 1 : 0)} 个 / ${data.batchCount} 批`}
           />
         )}
         <WorkflowNodeMetrics
@@ -341,6 +342,7 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
     }).toString();
     location.assign(url.href);
   }
+  const platformBatches = useMemo(() => planBatches(p), [p]);
   const nodes = useMemo(
     () =>
       p.nodes.map((n) => ({
@@ -349,6 +351,7 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
         position: { x: n.x, y: n.y },
         data: {
           node: n,
+          batchCount: platformBatches.filter((b) => b.nodeId === n.id).length,
           selected: n.id === selected,
           input: p.lots
             .filter(
@@ -379,7 +382,7 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
           open: () => setSelected(n.id),
         },
       })),
-    [p, selected],
+    [p, selected, platformBatches],
   );
   const edges = p.edges.map((e) => ({
     ...e,
@@ -393,42 +396,6 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
           ? "合流 · 批次汇集"
           : undefined,
   }));
-  const platformBatches = p.nodes
-    .filter((n) => n.kind === "stage")
-    .flatMap((n) =>
-      (
-        n.bindings ||
-        (n.executorId
-          ? [{ executorId: n.executorId, batchIds: n.batchIds || [], at: "" }]
-          : [])
-      ).flatMap((b) =>
-        b.batchIds.map((batchId) => {
-          const records = p.lots.filter(
-            (l) =>
-              l.nodeId === n.id &&
-              l.executorId === b.executorId &&
-              l.batchIds?.includes(batchId),
-          );
-          return {
-            key: n.id + ":" + b.executorId + ":" + batchId,
-            nodeId: n.id,
-            node: n.label,
-            executorId: b.executorId,
-            batchId,
-            input: records.reduce((s, l) => s + l.quantity, 0),
-            running: records
-              .filter((l) => l.state === "running")
-              .reduce((s, l) => s + l.quantity, 0),
-            failed: records
-              .filter((l) => l.state === "failed")
-              .reduce((s, l) => s + l.remaining, 0),
-            completed: records
-              .filter((l) => l.state === "available" && l.remaining === 0)
-              .reduce((s, l) => s + l.quantity, 0),
-          };
-        }),
-      ),
-    );
   const targetNode = p.nodes.find((n) => n.id === target);
   const targetBindings = (
     targetNode?.bindings ||
@@ -810,7 +777,7 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
                         </p>
                         <Button
                           danger
-                          disabled={disabled || b.running > 0}
+                          disabled={disabled || b.running > 0 || !b.bound}
                           onClick={() =>
                             run({
                               type: "unbind",
@@ -820,7 +787,7 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
                             })
                           }
                         >
-                          解绑此批次
+                          {b.bound ? "解绑此批次" : "已解绑 · 历史保留"}
                         </Button>
                       </div>
                     ))}
@@ -1191,6 +1158,11 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
               { title: "生产环节", dataIndex: "node" },
               { title: "执行器", dataIndex: "executorId" },
               { title: "实际批次", dataIndex: "batchId" },
+              {
+                title: "绑定",
+                dataIndex: "bound",
+                render: (v: boolean) => (v ? "已绑定" : "已解绑 · 历史"),
+              },
               ...["input", "running", "completed", "failed"].map((key, i) => ({
                 title: ["输入数量", "处理中", "已完成", "异常"][i],
                 dataIndex: key,
