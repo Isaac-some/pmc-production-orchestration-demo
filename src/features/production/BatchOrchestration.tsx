@@ -1,4 +1,11 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, {
+  memo,
+  useCallback,
+  useMemo,
+  useState,
+  useEffect,
+  useRef,
+} from "react";
 import {
   App,
   Alert,
@@ -12,6 +19,7 @@ import {
   Space,
   Tag,
   Empty,
+  Upload,
   Drawer,
   Checkbox,
 } from "antd";
@@ -32,8 +40,12 @@ import {
   MiniMap,
   MarkerType,
   type ReactFlowInstance,
+  applyNodeChanges,
+  type Node,
+  type NodeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { parseImportCSV } from "../../../shared/process";
 import { usePMC } from "../../api";
 import {
   createPlan,
@@ -41,6 +53,7 @@ import {
   planRisks,
   planSignals,
   planBatches,
+  planCids,
   type ProductionPlan,
   type PlanNode,
   type PlanAction,
@@ -50,6 +63,7 @@ import {
   WorkflowNodeParam,
   WorkflowNodeMetrics,
 } from "../../components/ui/WorkflowNodeCard";
+import { BatchBindings } from "../../components/ui/BatchBindings";
 import { HumanPlatformPrototype } from "../../components/ui/HumanPlatformPrototype";
 import { AITablePrompt } from "../../components/ui/AITablePrompt";
 import "./batch-orchestration.css";
@@ -125,10 +139,10 @@ function PlanCard({ data }: any) {
         }
         footer={
           n.kind === "buffer"
-            ? "质检确认 · 按批次放行"
+            ? "CID接收与交接"
             : n.kind === "stage"
-              ? "执行器回传 · 保留批次血缘"
-              : "库存按范围管理，工序按平台批次"
+              ? "平台生产批次"
+              : "CID数据集"
         }
         actionLabel={n.kind === "stage" ? "去标注 / 管理" : "查看与调度"}
         onAction={data.open}
@@ -185,7 +199,24 @@ function PlanCard({ data }: any) {
     </>
   );
 }
-const nodeTypes = { plan: PlanCard };
+const nodeTypes = { plan: memo(PlanCard) };
+const initialViewport = { x: 30, y: 70, zoom: 0.85 };
+const ManagedPlanFlow = memo(function ManagedPlanFlow({
+  models,
+  ...props
+}: { models: Node[] } & Omit<
+  React.ComponentProps<typeof ReactFlow>,
+  "nodes" | "onNodesChange"
+>) {
+  const [nodes, setNodes] = useState<Node[]>(models);
+  useEffect(() => setNodes(models), [models]);
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) =>
+      setNodes((current) => applyNodeChanges(changes, current)),
+    [],
+  );
+  return <ReactFlow {...props} nodes={nodes} onNodesChange={onNodesChange} />;
+});
 export function BatchOrchestration({ businessId }: { businessId: string }) {
   const { state, user, command, busy } = usePMC(),
     { message, modal } = App.useApp();
@@ -198,11 +229,19 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
     [full, setFull] = useState(false),
     [error, setError] = useState("");
   const [q, setQ] = useState<number>(1000000),
-    [target, setTarget] = useState(""),
     [targetBatch, setTargetBatch] = useState(""),
-    [connectTarget, setConnectTarget] = useState(""),
-    [search, setSearch] = useState(""),
-    [searched, setSearched] = useState(""),
+    [inputCid, setInputCid] = useState(""),
+    [edgeId, setEdgeId] = useState(""),
+    [edgeCid, setEdgeCid] = useState(""),
+    [offlineCid, setOfflineCid] = useState(""),
+    [uploadPreview, setUploadPreview] = useState<{
+      cid: string;
+      version: number;
+      quantity: number;
+      headers: string[];
+      file: string;
+    } | null>(null),
+    [uploadError, setUploadError] = useState(""),
     [picked, setPicked] = useState(false);
   const [humanOpen, setHumanOpen] = useState(false),
     [recoveryPlatform, setRecoveryPlatform] =
@@ -237,7 +276,7 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
   async function act(action: PlanAction) {
     setError("");
     try {
-      await command("orchestration.plan", {
+      return await command("orchestration.plan", {
         businessId,
         canvasRevision: p.revision,
         action,
@@ -254,11 +293,11 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
     document.querySelector(".batch-orchestration")?.scrollTo({ top: 0 });
   }, [tab]);
   useEffect(() => {
-    setTarget("");
     setTargetBatch("");
-    setConnectTarget("");
-    setSearch("");
-    setSearched("");
+    setInputCid("");
+    setOfflineCid("");
+    setUploadPreview(null);
+    setUploadError("");
     setPicked(false);
     setQ(1000000);
   }, [selected]);
@@ -277,6 +316,38 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
       query.delete("pmcRequest");
       query.delete("status");
       historyReplace(query);
+      return;
+    }
+    if (req.kind === "selection") {
+      const cid = query.get("selectionCid");
+      if (!cid) return;
+      returning.current = true;
+      setSelected(nodeId);
+      void act({
+        type: "ingest",
+        nodeId,
+        requestId,
+        cid,
+        eventId: requestId,
+        quantity: Number(query.get("quantity")),
+        headers: (query.get("headers") || "rowkey,tos_path,caption").split(","),
+      })
+        .then(() => {
+          for (const k of [
+            "pmcRequest",
+            "pmcNode",
+            "selectionCid",
+            "quantity",
+            "headers",
+            "status",
+          ])
+            query.delete(k);
+          historyReplace(query);
+          message.success("圈选结果已回传");
+        })
+        .catch(() => {
+          returning.current = false;
+        });
       return;
     }
     if (!query.get("executorId")) return;
@@ -343,7 +414,7 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
     location.assign(url.href);
   }
   const platformBatches = useMemo(() => planBatches(p), [p]);
-  const nodes = useMemo(
+  const nodeModels = useMemo(
     () =>
       p.nodes.map((n) => ({
         id: n.id,
@@ -384,41 +455,68 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
       })),
     [p, selected, platformBatches],
   );
-  const edges = p.edges.map((e) => ({
-    ...e,
-    type: "smoothstep",
-    labelStyle: { fontSize: 12, fill: "#596b7e" },
-    markerEnd: { type: MarkerType.ArrowClosed },
-    label:
-      p.edges.filter((x) => x.source === e.source).length > 1
-        ? "分支 · 分配数量"
-        : p.edges.filter((x) => x.target === e.target).length > 1
-          ? "合流 · 批次汇集"
-          : undefined,
-  }));
-  const targetNode = p.nodes.find((n) => n.id === target);
-  const targetBindings = (
-    targetNode?.bindings ||
-    (targetNode?.executorId
-      ? [
-          {
-            executorId: targetNode.executorId,
-            batchIds: targetNode.batchIds || [],
-            at: "",
-          },
-        ]
-      : [])
-  ).flatMap((b) =>
+  const activeEdge = p.edges.find((e) => e.id === edgeId);
+  const activeEdgeTarget = p.nodes.find((n) => n.id === activeEdge?.target);
+  const edgeCids = activeEdge
+    ? planCids(p, activeEdge.source).filter((c) => c.available > 0)
+    : [];
+  const currentCids = n ? planCids(p, n.id) : [];
+  const sourceOptions = n
+    ? p.edges
+        .filter((e) => e.target === n.id)
+        .flatMap((e) =>
+          planCids(p, e.source)
+            .filter((c) => c.available > 0)
+            .map((c) => ({
+              value: JSON.stringify([e.source, c.id]),
+              label:
+                p.nodes.find((n) => n.id === e.source)?.label +
+                " / " +
+                c.id +
+                " · " +
+                c.available.toLocaleString() +
+                " 条",
+            })),
+        )
+    : [];
+  const selectedInput = inputCid
+    ? JSON.parse(inputCid)
+    : sourceOptions.length === 1
+      ? JSON.parse(sourceOptions[0].value)
+      : null;
+  const stageBindings = (n?.bindings || []).flatMap((b) =>
     b.batchIds.map((batchId) => ({
       value: JSON.stringify([b.executorId, batchId]),
       label: b.executorId + " / " + batchId,
     })),
   );
-  const chosenBinding = targetBatch
+  const selectedBatch = targetBatch
     ? JSON.parse(targetBatch)
-    : targetBindings.length === 1
-      ? JSON.parse(targetBindings[0].value)
+    : stageBindings.length === 1
+      ? JSON.parse(stageBindings[0].value)
       : null;
+  const edges = p.edges.map((e) => ({
+    ...e,
+    type: "smoothstep",
+    // Give converging edges separate lanes so later edges cannot hide earlier ones.
+    pathOptions: {
+      offset: 8,
+      stepPosition:
+        (p.edges.filter((x) => x.target === e.target).findIndex((x) => x.id === e.id) + 1) /
+        (p.edges.filter((x) => x.target === e.target).length + 1),
+    },
+    interactionWidth: 12,
+    ariaLabel: `${p.nodes.find((n) => n.id === e.source)?.label} → ${p.nodes.find((n) => n.id === e.target)?.label}`,
+    labelStyle: { fontSize: 12, fill: "#596b7e" },
+    markerEnd: { type: MarkerType.ArrowClosed },
+    label:
+      p.edges.filter((x) => x.source === e.source).length > 1
+        ? "分支 · 分配数量"
+        : p.edges.filter((x) => x.target === e.target).length > 1 &&
+            p.edges.find((x) => x.target === e.target)?.id === e.id
+          ? "合流 · 批次汇集"
+          : undefined,
+  }));
   const outgoing = p.edges.filter((e) => e.source === selected),
     lots = p.lots.filter((l) => l.nodeId === selected);
   const lotColumns: any[] = [
@@ -464,12 +562,126 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
       render: (v: string[]) => v.join(", ") || "来源输入",
     },
   ];
+  function downloadCid(job: ProductionPlan["offline"][number], sample = false) {
+    const data = {
+      cid: job.cid,
+      version: job.version || 1,
+      quantity: job.quantity,
+      headers: job.headers || ["rowkey", "tos_path", "caption"],
+      scope: job.id,
+    };
+    const columns = [
+      "cid",
+      "cid_version",
+      "rowkey",
+      "tos_path",
+      ...data.headers.filter(
+        (h) => !["cid", "cid_version", "rowkey", "tos_path"].includes(h),
+      ),
+    ];
+    const csv = [
+      columns.join(","),
+      ...Array.from({ length: Math.min(3, job.quantity) }, (_, i) =>
+        columns
+          .map((h) =>
+            h === "cid"
+              ? job.cid
+              : h === "cid_version"
+                ? String(data.version)
+                : h === "rowkey"
+                  ? "demo-" + (i + 1)
+                  : h === "tos_path"
+                    ? "tos://demo-motion/" + (i + 1) + ".mp4"
+                    : "示例内容",
+          )
+          .join(","),
+      ),
+    ].join("\n");
+    const blob = new Blob([sample ? csv : JSON.stringify(data, null, 2)], {
+      type: sample ? "text/csv;charset=utf-8" : "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download =
+      job.cid + "-v" + data.version + (sample ? "-sample.csv" : ".json");
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function previewCid(
+    file: File,
+    job: ProductionPlan["offline"][number],
+  ) {
+    setUploadPreview(null);
+    setUploadError("");
+    try {
+      if (file.size > 2 * 1024 * 1024)
+        throw Error("原型预览文件请小于2MB；大规模数据由平台回执登记");
+      const text = await file.text();
+      let data: any;
+      if (file.name.toLowerCase().endsWith(".json")) data = JSON.parse(text);
+      else {
+        const { headers, rows } = parseImportCSV(text);
+        if (!headers.includes("cid") || !headers.includes("cid_version"))
+          throw Error("CSV必须保留cid与cid_version列");
+        if (rows.some((r) => r.cid !== job.cid))
+          throw Error("文件包含其他CID，不能混合上传");
+        if (rows.some((r) => Number(r.cid_version) !== (job.version || 1)))
+          throw Error("上传CID版本不匹配");
+        const keys = new Set<string>();
+        for (const row of rows) {
+          if (!row.rowkey || !row.tos_path)
+            throw Error("必须保留原始rowkey和tos_path");
+          const key = row.rowkey + "\u0000" + row.tos_path;
+          if (keys.has(key)) throw Error("上传包含重复数据");
+          keys.add(key);
+        }
+        data = {
+          cid: job.cid,
+          version: job.version || 1,
+          quantity: rows.length,
+          headers,
+        };
+      }
+      if (data.cid !== job.cid) throw Error("上传CID与所选CID不一致");
+      if (data.version !== (job.version || 1)) throw Error("CID版本不匹配");
+      if (!Number.isSafeInteger(data.quantity) || data.quantity < 0)
+        throw Error("上传数据总量无效");
+      if (
+        !Array.isArray(data.headers) ||
+        !data.headers.includes("rowkey") ||
+        !data.headers.includes("tos_path")
+      )
+        throw Error("必须保留rowkey和tos_path表头");
+      setOfflineJob(job.id);
+      setUploadPreview({ ...data, file: file.name });
+    } catch (e) {
+      setUploadError((e as Error).message);
+    }
+  }
+  async function goSelection() {
+    if (!n) return;
+    const requestId = crypto.randomUUID();
+    await act({
+      type: "request",
+      nodeId: n.id,
+      requestId,
+      pendingKind: "selection",
+    });
+    const query = new URLSearchParams({
+      pmcProject: businessId,
+      pmcNode: n.id,
+      pmcRequest: requestId,
+      pmcReturn: location.href,
+    });
+    location.hash = "/selection?" + query;
+  }
   return (
     <section className={"batch-orchestration" + (full ? " batch-full" : "")}>
       <header className="batch-top">
         <div>
           <h1>生产编排</h1>
-          <span>运动感知 POC · 批次调度 · 生产事件模拟</span>
+          <span>运动感知 · 生产编排</span>
         </div>
         <Space>
           <Button onClick={() => setHistory(true)}>
@@ -486,7 +698,6 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
             icon={<FullscreenOutlined aria-hidden="true" />}
             onClick={() => {
               setFull(!full);
-              setTimeout(() => flow.current?.fitView({ padding: 0.15 }), 100);
             }}
           >
             {full ? "退出全屏" : "全屏画布"}
@@ -571,13 +782,13 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
               />
               <span>端口连线交接 · 点击连线解绑</span>
             </div>
-            <ReactFlow
-              nodes={nodes}
+            <ManagedPlanFlow
+              models={nodeModels}
               edges={edges}
               nodesDraggable={!disabled}
               nodesConnectable={!disabled}
               nodeTypes={nodeTypes}
-              defaultViewport={{ x: 30, y: 70, zoom: 0.85 }}
+              defaultViewport={initialViewport}
               minZoom={0.18}
               maxZoom={1.25}
               onInit={(f) => (flow.current = f)}
@@ -594,23 +805,15 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
                 !disabled &&
                 run({ type: "connect", source: e.source!, target: e.target! })
               }
-              onEdgeClick={(_, e) =>
-                !disabled &&
-                modal.confirm({
-                  title: "移除后续交接关系？",
-                  content:
-                    "已产生批次的数量和血缘会保留，只停止此路径后续调度。",
-                  onOk: () => act({ type: "disconnect", source: e.id }),
-                })
-              }
+              onEdgeClick={(_, e) => {
+                setEdgeId(e.id);
+                setEdgeCid("");
+              }}
             >
               <Controls />
               <MiniMap />
-            </ReactFlow>
-            <div className="batch-legend">
-              来源接入 → 储备 / 直接生产 /
-              直接交付　·　缓冲池是放行闸门　·　多入为合流，多出为数量分支
-            </div>
+            </ManagedPlanFlow>
+            <div className="batch-legend">拖动节点编排 · 从端口连接上下游</div>
           </div>
           {n ? (
             <aside className="batch-inspector">
@@ -621,181 +824,150 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
                 </div>
                 <Button onClick={() => setSelected("")}>关闭</Button>
               </header>
-              <p>
-                {n.kind === "source"
-                  ? "按来源生产批次登记数量与引用，原始数据留在数据平台。"
-                  : n.kind === "buffer"
-                    ? "产出在此等待确认；可分配给多个下游，累计放行不超过可用量。"
-                    : n.kind === "stage"
-                      ? "在此创建执行器、绑定平台最小生产批次，并接收生产反馈。"
-                      : "可同时接收多条线路，保留来源与每次流转的批次血缘。"}
-              </p>
               {n.kind === "source" && (
                 <>
                   <Tag>{modes[n.mode!]}</Tag>
                   {n.mode === "selection" && (
                     <>
-                      <label>检索库内数据</label>
-                      <Input
-                        value={search}
-                        onChange={(e) => {
-                          setSearch(e.target.value);
-                          setSearched("");
-                          setPicked(false);
-                        }}
-                        placeholder="如：运动场景视频"
-                      />
+                      <div className="batch-cid-total">
+                        <span>圈选结果</span>
+                        <strong>
+                          {currentCids
+                            .reduce((sum, c) => sum + c.total, 0)
+                            .toLocaleString()}{" "}
+                          条
+                        </strong>
+                      </div>
                       <Button
-                        disabled={!search.trim() || disabled}
-                        onClick={() => {
-                          setSearched(search);
-                          setPicked(false);
-                        }}
+                        type="primary"
+                        disabled={disabled}
+                        onClick={() => void goSelection()}
                       >
-                        检索演示数据
+                        去圈选
                       </Button>
-                      {searched && (
-                        <div className="batch-search">
-                          <Checkbox
-                            checked={picked}
-                            onChange={(e) => setPicked(e.target.checked)}
-                          >
-                            运动感知素材 · 1,000,000 条
-                          </Checkbox>
-                          <p>模拟检索结果；选定前无可用 CID</p>
-                        </div>
-                      )}
                     </>
                   )}
-                  <label>本次接入数量（条）</label>
-                  <InputNumber
-                    aria-label="本次接入数量"
-                    min={1}
-                    max={1000000000}
-                    precision={0}
-                    value={n.mode === "selection" ? 1000000 : q}
-                    disabled={n.mode === "selection"}
-                    onChange={(v) => setQ(v || 1)}
-                  />
-                  <Button
-                    type="primary"
-                    disabled={
-                      disabled ||
-                      (n.mode === "selection" && !picked) ||
-                      n.paused ||
-                      (n.mode === "purchase" && lots.length > 0)
-                    }
-                    onClick={() =>
-                      run({
-                        type: "ingest",
-                        nodeId: n.id,
-                        quantity: n.mode === "selection" ? 1000000 : q,
-                        eventId: crypto.randomUUID(),
-                        cid:
-                          n.mode === "selection"
-                            ? "DEMO-CID-" + crypto.randomUUID().slice(0, 8)
-                            : undefined,
-                      })
-                    }
-                  >
-                    {n.mode === "selection"
-                      ? "确认圈选并接入"
-                      : n.mode === "purchase"
-                        ? "模拟一次性导入"
-                        : "模拟扫描到新生产批次"}
-                  </Button>
-                  <p className="batch-note">
-                    {n.mode === "collection"
-                      ? "持续采集按扫描事件追加；仅手动推进模拟，不后台不断造数。"
-                      : n.mode === "purchase"
-                        ? "本采购来源只导入一次，新增采购另建来源。"
-                        : "CID 在确认检索结果后才登记；公开原型使用 DEMO 标识。"}
-                  </p>
+                  {n.mode !== "selection" && (
+                    <>
+                      <label>本次接入数量（条）</label>
+                      <InputNumber
+                        aria-label="本次接入数量"
+                        min={1}
+                        max={1000000000}
+                        precision={0}
+                        value={q}
+                        onChange={(v) => setQ(v || 1)}
+                      />
+                      <Button
+                        type="primary"
+                        disabled={
+                          disabled ||
+                          n.paused ||
+                          (n.mode === "purchase" && lots.length > 0)
+                        }
+                        onClick={() =>
+                          run({
+                            type: "ingest",
+                            nodeId: n.id,
+                            quantity: q,
+                            eventId: crypto.randomUUID(),
+                          })
+                        }
+                      >
+                        {n.mode === "purchase"
+                          ? "模拟一次性导入"
+                          : "模拟扫描到新增数据"}
+                      </Button>
+                    </>
+                  )}
                 </>
               )}
               {n.kind === "stage" && (
                 <>
-                  <div className="batch-well">
-                    <span>绑定执行器</span>
-                    <strong>{n.executorId || "未绑定"}</strong>
-                    <span>平台生产批次</span>
-                    <strong>{n.batchIds?.join(", ") || "未绑定"}</strong>
-                  </div>
-                  {n.feedback && (
-                    <Alert
-                      type="info"
-                      message={"平台回传：" + n.feedback.status}
-                      description={`末端成功 ${n.feedback.completed.toLocaleString()} / 失败 ${n.feedback.failed.toLocaleString()} 条；回传 ${new Date(n.feedback.at).toLocaleString("zh-CN")}。绑定反馈不直接重复计入交付。`}
-                    />
-                  )}
-                  <Button
-                    type="primary"
+                  <BatchBindings
+                    batches={platformBatches.filter((b) => b.nodeId === n.id)}
                     disabled={disabled}
-                    onClick={() => void goPlatform().catch(() => undefined)}
-                  >
-                    {n.platform === "human"
-                      ? "去人工标注 · 创建并绑定"
-                      : "去标注 · 新建执行器"}
-                  </Button>
-                  <Space>
+                    onBind={() => {
+                      setExecutor("");
+                      setBatch("");
+                      setBinding(true);
+                    }}
+                    onCreate={() => void goPlatform().catch(() => undefined)}
+                    onUnbind={async (executorId, batchId) => {
+                      await act({
+                        type: "unbind",
+                        nodeId: n.id,
+                        executorId,
+                        batchIds: [batchId],
+                      });
+                    }}
+                  />
+                  <div className="batch-stage-input">
+                    <h4>生产输入</h4>
+                    <Select
+                      aria-label="上游输入CID"
+                      placeholder="选择已连线的上游CID"
+                      value={
+                        inputCid ||
+                        (sourceOptions.length === 1
+                          ? sourceOptions[0].value
+                          : undefined)
+                      }
+                      onChange={setInputCid}
+                      options={sourceOptions}
+                    />
+                    <Select
+                      aria-label="执行生产批次"
+                      placeholder="选择本环节实际批次"
+                      value={
+                        targetBatch ||
+                        (stageBindings.length === 1
+                          ? stageBindings[0].value
+                          : undefined)
+                      }
+                      onChange={setTargetBatch}
+                      options={stageBindings}
+                    />
+                    <label>本次执行数量（条）</label>
+                    <InputNumber
+                      aria-label="本次执行数量"
+                      value={q}
+                      min={1}
+                      max={1000000000}
+                      precision={0}
+                      onChange={(v) => setQ(v || 1)}
+                    />
                     <Button
-                      disabled={disabled}
-                      onClick={() => {
-                        setExecutor(n.executorId || "");
-                        setBatch(n.batchIds?.join(",") || "");
-                        setBinding(true);
-                      }}
+                      type="primary"
+                      disabled={disabled || !selectedInput || !selectedBatch}
+                      onClick={() =>
+                        run({
+                          type: "transfer",
+                          nodeId: selectedInput[0],
+                          cid: selectedInput[1],
+                          target: n.id,
+                          quantity: q,
+                          executorId: selectedBatch[0],
+                          batchIds: [selectedBatch[1]],
+                        })
+                      }
                     >
-                      绑定已有执行器
+                      启动生产
                     </Button>
-                    <Button
-                      danger
-                      disabled={disabled || !n.executorId}
-                      onClick={() => run({ type: "unbind", nodeId: n.id })}
-                    >
-                      解绑
-                    </Button>
-                  </Space>
-                  <h4>
-                    环节内生产批次 ·{" "}
-                    {platformBatches.filter((b) => b.nodeId === n.id).length} 批
-                  </h4>
-                  <p>
-                    批次由平台创建，可为500条或80万条。运行中可继续绑定新执行器；放行只增加对应批次输入，不新造平台批次。
-                  </p>
-                  {platformBatches
-                    .filter((b) => b.nodeId === n.id)
-                    .map((b) => (
-                      <div className="batch-run" key={b.key}>
-                        <strong>
-                          {b.batchId} · {b.input.toLocaleString()} 条
-                        </strong>
-                        <p>
-                          {b.executorId} · 处理中 {b.running.toLocaleString()} /
-                          完成 {b.completed.toLocaleString()} / 异常{" "}
-                          {b.failed.toLocaleString()}
-                        </p>
-                        <Button
-                          danger
-                          disabled={disabled || b.running > 0 || !b.bound}
-                          onClick={() =>
-                            run({
-                              type: "unbind",
-                              nodeId: n.id,
-                              executorId: b.executorId,
-                              batchIds: [b.batchId],
-                            })
-                          }
-                        >
-                          {b.bound ? "解绑此批次" : "已解绑 · 历史保留"}
-                        </Button>
-                      </div>
-                    ))}
-                  {n.platform === "human" && (
-                    <p className="batch-note">
-                      人工平台无在线原型，在本地复用绑定面板演示；终端结果确认后才计入可交付产出。
-                    </p>
-                  )}
+                  </div>
+                  <label>产出方式</label>
+                  <Select
+                    aria-label="产出方式"
+                    value={n.outputMode || "fixed"}
+                    disabled={disabled || lots.some((l) => l.executorId)}
+                    onChange={(outputMode) =>
+                      run({ type: "configureOutput", nodeId: n.id, outputMode })
+                    }
+                    options={[
+                      { value: "fixed", label: "成批生产 · 每批固定CID" },
+                      { value: "append", label: "流式生产 · 持续追加同一CID" },
+                    ]}
+                  />
                   {stock(p, n.id) > 0 && (
                     <Button
                       disabled={disabled || !n.executorId}
@@ -887,101 +1059,45 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
                   }
                 />
               )}
-              {n.kind !== "stage" && n.kind !== "delivery" && (
-                <>
-                  <h4>下游交接</h4>
-                  <Select
-                    aria-label="新增交接目标"
-                    placeholder="可直接生产或交付，选择新目标"
-                    value={connectTarget || undefined}
-                    onChange={setConnectTarget}
-                    options={p.nodes
-                      .filter(
-                        (x) =>
-                          x.id !== n.id &&
-                          x.kind !== "source" &&
-                          !outgoing.some((e) => e.target === x.id),
-                      )
-                      .map((x) => ({ value: x.id, label: x.label }))}
-                  />
-                  <Button
-                    disabled={disabled || !connectTarget}
-                    onClick={() =>
-                      run({
-                        type: "connect",
-                        source: n.id,
-                        target: connectTarget,
-                      })
-                    }
-                  >
-                    建立交接关系
-                  </Button>
-                  {!outgoing.length && (
-                    <p>从右侧端口连接到生产工序或交付池。</p>
-                  )}
-                  <Select
-                    aria-label="交接目标"
-                    placeholder="选择下游"
-                    value={target || undefined}
-                    onChange={(v) => {
-                      setTarget(v);
-                      setTargetBatch("");
-                    }}
-                    options={outgoing.map((e) => ({
-                      value: e.target,
-                      label: p.nodes.find((n) => n.id === e.target)?.label,
-                    }))}
-                  />
-                  {targetNode?.kind === "stage" && (
-                    <Select
-                      aria-label="目标平台生产批次"
-                      placeholder="选择环节内的实际生产批次"
-                      value={
-                        targetBatch ||
-                        (targetBindings.length === 1
-                          ? targetBindings[0].value
-                          : undefined)
-                      }
-                      onChange={setTargetBatch}
-                      options={targetBindings}
-                    />
-                  )}
-                  <label>本次放行数量（条）</label>
-                  <InputNumber
-                    aria-label="本次放行数量"
-                    value={q}
-                    min={1}
-                    max={1000000000}
-                    precision={0}
-                    onChange={(v) => setQ(v || 1)}
-                  />
+              <section className="batch-relations">
+                <h4>上下游</h4>
+                <div>
+                  <span>上游</span>
                   <p>
-                    可用库存 {stock(p, n.id).toLocaleString()}{" "}
-                    条；分支按数量拆分，合流保留多父批次。
+                    {p.edges
+                      .filter((e) => e.target === n.id)
+                      .map((e) => p.nodes.find((n) => n.id === e.source)?.label)
+                      .join("、") || "—"}
                   </p>
-                  <Button
-                    disabled={
-                      disabled ||
-                      !target ||
-                      stock(p, n.id) < q ||
-                      (targetNode?.kind === "stage" && !chosenBinding)
-                    }
-                    onClick={() =>
-                      run({
-                        type: "transfer",
-                        nodeId: n.id,
-                        target,
-                        quantity: q,
-                        executorId: chosenBinding?.[0],
-                        batchIds: chosenBinding
-                          ? [chosenBinding[1]]
-                          : undefined,
-                      })
-                    }
-                  >
-                    确认放行给下游
-                  </Button>
-                </>
+                </div>
+                <div>
+                  <span>下游</span>
+                  <p>
+                    {outgoing
+                      .map((e) => p.nodes.find((n) => n.id === e.target)?.label)
+                      .join("、") || "—"}
+                  </p>
+                </div>
+              </section>
+              {n.kind !== "stage" && (
+                <section className="batch-cid-list">
+                  <h4>数据集 · {currentCids.length} 个 CID</h4>
+                  {currentCids.map((c) => (
+                    <div className="batch-cid-row" key={c.id}>
+                      <strong>{c.id}</strong>
+                      <span>
+                        {c.mode === "append" ? "持续追加" : "固定数据集"} · v
+                        {c.version}
+                      </span>
+                      <b>{(c.available + c.processing).toLocaleString()} 条</b>
+                      {c.processing > 0 && (
+                        <small>
+                          离线处理中 {c.processing.toLocaleString()} 条
+                        </small>
+                      )}
+                    </div>
+                  ))}
+                </section>
               )}
               {["sourcePool", "buffer"].includes(n.kind) && (
                 <Button
@@ -1008,6 +1124,7 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
               )}
               <AITablePrompt
                 nodeId={n.id}
+                headers={[...new Set(currentCids.flatMap((c) => c.headers))]}
                 rule={p.rules[n.id]}
                 disabled={disabled}
                 onConfirm={async (prompt, columns) => {
@@ -1028,33 +1145,7 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
                 查看生产批次与血缘
               </Button>
             </aside>
-          ) : (
-            <aside className="batch-inspector batch-guide">
-              <h3>从输入到交付</h3>
-              <p>
-                先圈选、采集或采买接入，按批次放行；点击工序可去平台创建执行器。
-              </p>
-              <Button
-                onClick={() => {
-                  setSelected("selection");
-                  flow.current?.setCenter(148, 150, { zoom: 1, duration: 200 });
-                }}
-              >
-                开始圈选
-              </Button>
-              <h4>长周期生产</h4>
-              <p>
-                30
-                天计划，千万级目标。只记录批次元数据，查看逐日产能和预测缺口。
-              </p>
-              <Button onClick={() => setTab("monitor")}>查看风险与批次</Button>
-              <Alert
-                type="info"
-                message="模拟边界"
-                description="真实跨原型跳转；TOS、AI处理和生产回传以模拟事件验证。不会操作测试环境生产数据。"
-              />
-            </aside>
-          )}
+          ) : null}
         </div>
       )}
       {tab === "monitor" && (
@@ -1260,60 +1351,94 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
         }}
       />
       <Modal
-        title="离线加工 · 批次记录"
+        title="离线处理 CID"
         open={offline}
-        onCancel={() => setOffline(false)}
+        onCancel={() => {
+          setOffline(false);
+          setUploadPreview(null);
+        }}
         footer={null}
-        width={680}
+        width={800}
+        centered
+        styles={{
+          body: { maxHeight: "calc(100vh - 210px)", overflowY: "auto" },
+        }}
       >
-        <p>
-          原始数据由资源平台导出；本原型下载的是批次清单，不生成百万行CSV。登记后冻结该数量，新增库存仍可生产。
-        </p>
-        <label>本次处理数量</label>
-        <InputNumber
-          aria-label="离线数量"
-          value={q}
-          min={1}
-          precision={0}
-          onChange={(v) => setQ(v || 1)}
+        <label>选择一个输入 CID</label>
+        <Select
+          aria-label="离线CID"
+          style={{ width: "100%", margin: "12px 0" }}
+          value={offlineCid || undefined}
+          onChange={(id) => {
+            setOfflineCid(id);
+            setUploadPreview(null);
+            setUploadError("");
+          }}
+          options={currentCids.map((c) => ({
+            value: c.id,
+            label:
+              c.id +
+              " · " +
+              c.total.toLocaleString() +
+              " 条 · " +
+              (c.mode === "append" ? "持续追加" : "固定"),
+            disabled: c.available === 0 || c.consumed > 0,
+          }))}
         />
         <Button
-          disabled={disabled || stock(p, selected) < q}
-          onClick={() =>
-            run({ type: "offline", nodeId: selected, quantity: q })
+          disabled={
+            disabled ||
+            !offlineCid ||
+            p.offline.some(
+              (j) => j.cid === offlineCid && j.status === "processing",
+            )
           }
+          onClick={async () => {
+            const result = await act({
+              type: "offline",
+              nodeId: selected,
+              cid: offlineCid,
+            });
+            downloadCid(result.canvas.offline.at(-1));
+          }}
         >
-          登记离线处理范围
+          登记并下载此 CID
         </Button>
+        {uploadError && <Alert type="error" message={uploadError} />}
         {(p.offline || [])
           .filter((j) => j.nodeId === selected)
           .map((j) => (
-            <div className="batch-run" key={j.id}>
+            <div className="cid-offline-job" key={j.id}>
+              <header>
+                <strong>{j.cid}</strong>
+                <Tag>
+                  {j.status === "processing"
+                    ? "处理中"
+                    : j.status === "returned"
+                      ? "已回传"
+                      : "已取消"}
+                </Tag>
+              </header>
               <p>
-                {j.id} · {j.quantity.toLocaleString()} 条 · {j.status}
+                下载版本 v{j.version || 1} · {j.quantity.toLocaleString()} 条
               </p>
-              <Space>
-                <Button
-                  onClick={() => {
-                    const blob = new Blob([JSON.stringify(j, null, 2)], {
-                      type: "application/json",
-                    });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = j.id + "-manifest.json";
-                    a.click();
-                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+              <Space wrap>
+                <Button onClick={() => downloadCid(j)}>下载 CID 引用</Button>
+                <Button onClick={() => downloadCid(j, true)}>
+                  下载 3 行样例 CSV
+                </Button>
+                <Upload
+                  accept=".csv,.json"
+                  showUploadList={false}
+                  beforeUpload={async (file) => {
+                    await previewCid(file, j);
+                    return false;
                   }}
                 >
-                  下载批次清单
-                </Button>
-                <Button
-                  disabled={disabled || j.status !== "processing"}
-                  onClick={() => setOfflineJob(j.id)}
-                >
-                  回传预览
-                </Button>
+                  <Button disabled={disabled || j.status !== "processing"}>
+                    上传处理结果
+                  </Button>
+                </Upload>
                 <Button
                   disabled={disabled || j.status !== "processing"}
                   onClick={() =>
@@ -1324,32 +1449,128 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
                     })
                   }
                 >
-                  取消并解冻
+                  取消处理
                 </Button>
               </Space>
-              {offlineJob === j.id && j.status === "processing" && (
-                <div>
+              {uploadPreview && offlineJob === j.id && (
+                <div className="cid-upload-preview">
+                  <h4>回传预览</h4>
+                  <p>{uploadPreview.file}</p>
                   <p>
-                    将回传 {q.toLocaleString()} 条；原CID {j.cid}{" "}
-                    保留；其他范围和并发新增不覆盖。仅演示平台完成回执，实际文件仍由资源平台处理。
+                    覆盖 {j.cid} · v{j.version} → v{(j.version || 1) + 1}
+                  </p>
+                  <p>
+                    处理前 {j.quantity.toLocaleString()} 条 → 上传后{" "}
+                    {uploadPreview.quantity.toLocaleString()} 条
+                  </p>
+                  <p>
+                    覆盖后池内现存{" "}
+                    {(
+                      stock(p, selected) + uploadPreview.quantity
+                    ).toLocaleString()}{" "}
+                    条；下载后新增保留
                   </p>
                   <Button
-                    disabled={disabled || q > j.quantity}
-                    onClick={() =>
-                      run({
+                    type="primary"
+                    disabled={disabled}
+                    onClick={async () => {
+                      const result = await act({
                         type: "offlineReturn",
                         nodeId: selected,
                         lotId: j.id,
-                        quantity: q,
-                      })
-                    }
+                        cid: uploadPreview.cid,
+                        expectedVersion: uploadPreview.version,
+                        quantity: uploadPreview.quantity,
+                        headers: uploadPreview.headers,
+                      });
+                      setUploadPreview(null);
+                      message.success(
+                        "已覆盖原CID，池内现存 " +
+                          stock(result.canvas, selected).toLocaleString() +
+                          " 条",
+                      );
+                    }}
                   >
-                    确认模拟回传
+                    确认覆盖原 CID
                   </Button>
                 </div>
               )}
             </div>
           ))}
+        <p className="batch-note">
+          池内现存 {stock(p, selected).toLocaleString()} 条
+        </p>
+      </Modal>
+      <Modal
+        title="交接关系"
+        open={!!activeEdge}
+        onCancel={() => setEdgeId("")}
+        footer={null}
+        width={600}
+      >
+        <p>
+          {p.nodes.find((n) => n.id === activeEdge?.source)?.label} →{" "}
+          {activeEdgeTarget?.label}
+        </p>
+        {activeEdgeTarget?.kind === "stage" ? (
+          <>
+            <p>生产输入与执行数量在目标生产环节中设置。</p>
+            <Button
+              onClick={() => {
+                setSelected(activeEdgeTarget.id);
+                setEdgeId("");
+              }}
+            >
+              打开生产环节
+            </Button>
+          </>
+        ) : (
+          <>
+            <Select
+              aria-label="交接CID"
+              placeholder="选择整个CID"
+              value={edgeCid || undefined}
+              onChange={setEdgeCid}
+              style={{ width: "100%", margin: "12px 0" }}
+              options={edgeCids.map((c) => ({
+                value: c.id,
+                label: c.id + " · " + c.available.toLocaleString() + " 条",
+              }))}
+            />
+            <Button
+              type="primary"
+              disabled={disabled || !edgeCid}
+              onClick={async () => {
+                await act({
+                  type: "transfer",
+                  nodeId: activeEdge!.source,
+                  target: activeEdge!.target,
+                  cid: edgeCid,
+                });
+                setEdgeId("");
+              }}
+            >
+              交接此 CID
+            </Button>
+          </>
+        )}
+        <Button
+          danger
+          style={{ float: "right" }}
+          disabled={disabled}
+          onClick={() =>
+            modal.confirm({
+              title: "解除交接关系？",
+              content: "已产生的数据与历史生产记录会保留。",
+              onOk: async () => {
+                await act({ type: "disconnect", source: edgeId });
+                setEdgeId("");
+              },
+            })
+          }
+        >
+          解除连线
+        </Button>
       </Modal>
       <Modal
         title="交付留存范围"

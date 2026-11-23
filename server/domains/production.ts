@@ -444,7 +444,7 @@ export function handleProduction(s: State, cmd: Command, c: Context): any {
   );
   const x = cmd.payload,
     b = mutable(s, x.businessId, c),
-    p = (s.production[b.id] ||= productionData(s, b.id));
+    p = (s.production[b.id] = productionData(s, b.id));
   ok(b.kind === "project", "生产管理仅适用于项目");
   if (action === "createTask") {
     ok(

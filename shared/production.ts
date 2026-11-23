@@ -289,19 +289,22 @@ export const money = (x: number | null | undefined) =>
   x == null
     ? "待回传"
     : `¥${(x / 100).toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
+/** Complete legacy snapshots in place: command callers share this mutable ledger. */
 export function productionData(s: State, id: string): ProductionData {
-  return (
-    s.production[id] || {
-      chains: [],
-      tasks: [],
-      deliveries: [],
-      acceptances: [],
-      audit: [],
-      budgetHistory: [],
-      costConfirmed: false,
-    }
-  );
+  const p = s.production[id] || {
+    chains: [], tasks: [], deliveries: [], acceptances: [], audit: [],
+    budgetHistory: [], costConfirmed: false,
+  };
+  p.chains ??= [];
+  p.tasks ??= [];
+  p.deliveries ??= [];
+  p.acceptances ??= [];
+  p.audit ??= [];
+  p.budgetHistory ??= [];
+  p.costConfirmed ??= false;
+  return p;
 }
+
 export function latest(ch: Chain) {
   return ch.versions[ch.versions.length - 1];
 }

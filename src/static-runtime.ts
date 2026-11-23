@@ -30,8 +30,12 @@ function publicSeed(): State {
     state.businesses.push(createMotionBusiness());
     state.production["motion-poc"] = {
       chains: [],
+      tasks: [],
       deliveries: [],
       acceptances: [],
+      audit: [],
+      budgetHistory: [],
+      costConfirmed: false,
     };
   }
   return state;

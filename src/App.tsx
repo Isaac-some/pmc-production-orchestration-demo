@@ -61,6 +61,7 @@ import {
   TasksPage,
   ImportPage,
 } from "./features/process";
+import { SelectionPlatformPage } from "./features/SelectionPlatformPage";
 import { PlatformResults } from "./features/production/PlatformResults";
 import { ProductionPanel } from "./features/production";
 import {
@@ -565,6 +566,7 @@ export default function App() {
         </Layout.Header>
         <Layout.Content className="workspace">
           <Routes>
+            <Route path="/selection" element={<SelectionPlatformPage />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route
               path="/opportunities"

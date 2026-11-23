@@ -13,6 +13,7 @@ export type PlanNode = {
   bucket?: string;
   bindings?: { executorId: string; batchIds: string[]; at: string }[];
   dailyCapacity?: number;
+  outputMode?: "fixed" | "append";
   feedback?: { status: string; completed: number; failed: number; at: string };
 };
 export type PlanLot = {
@@ -21,6 +22,7 @@ export type PlanLot = {
   quantity: number;
   remaining: number;
   cid?: string;
+  headers?: string[];
   parents: string[];
   state: "available" | "running" | "failed" | "delivered" | "offline";
   executorId?: string;
@@ -38,16 +40,26 @@ export type ProductionPlan = {
   lots: PlanLot[];
   events: { at: string; detail: string }[];
   seen: string[];
-  requests: Record<string, { nodeId: string; used: boolean }>;
+  requests: Record<
+    string,
+    { nodeId: string; used: boolean; kind?: "selection" | "executor" }
+  >;
   goal: number;
   days: number;
   daily: number[];
+  cidMeta?: Record<
+    string,
+    { mode: "fixed" | "append"; version: number; headers: string[] }
+  >;
   offline: {
     id: string;
     nodeId: string;
     quantity: number;
     parents: string[];
     cid: string;
+    snapshot?: { id: string; quantity: number; remaining: number }[];
+    version?: number;
+    headers?: string[];
     status: "processing" | "returned" | "cancelled";
     at: string;
   }[];
@@ -69,6 +81,10 @@ export type PlanAction = {
   eventId?: string;
   cid?: string;
   lotId?: string;
+  outputMode?: "fixed" | "append";
+  expectedVersion?: number;
+  headers?: string[];
+  pendingKind?: "selection" | "executor";
   fail?: boolean;
   prompt?: string;
   columns?: string;
@@ -222,6 +238,46 @@ export const stock = (p: ProductionPlan, id: string) =>
   p.lots
     .filter((l) => l.nodeId === id && l.state === "available")
     .reduce((s, l) => s + l.remaining, 0);
+export function planCids(p: ProductionPlan, nodeId: string) {
+  const groups = new Map<
+    string,
+    {
+      id: string;
+      nodeId: string;
+      total: number;
+      available: number;
+      processing: number;
+      consumed: number;
+      version: number;
+      mode: "fixed" | "append";
+      headers: string[];
+    }
+  >();
+  for (const l of p.lots.filter((l) => l.nodeId === nodeId && l.cid)) {
+    const meta = p.cidMeta?.[l.cid!];
+    let g = groups.get(l.cid!);
+    if (!g) {
+      g = {
+        id: l.cid!,
+        nodeId,
+        total: 0,
+        available: 0,
+        processing: 0,
+        consumed: 0,
+        version: meta?.version || 1,
+        mode: meta?.mode || "fixed",
+        headers: meta?.headers ||
+          l.headers || ["rowkey", "tos_path", "caption"],
+      };
+      groups.set(l.cid!, g);
+    }
+    g.total += l.quantity;
+    g.available += l.state === "available" ? l.remaining : 0;
+    g.processing += l.state === "offline" ? l.remaining : 0;
+    g.consumed += l.quantity - l.remaining;
+  }
+  return [...groups.values()];
+}
 export function planSignals(p: ProductionPlan) {
   const now = Date.now();
   return p.nodes.flatMap((n) => {
@@ -284,6 +340,7 @@ export function applyPlan(
 ): ProductionPlan {
   const p = structuredClone(before);
   p.offline ||= [];
+  p.cidMeta ||= {};
   p.retention ||= [];
   const n = p.nodes.find((n) => n.id === a.nodeId);
   const now = new Date().toISOString();
@@ -312,6 +369,18 @@ export function applyPlan(
       state,
       cid: cid || next("DEMO-CID"),
       at: now,
+      headers: a.headers ||
+        p.lots.find((l) => parents.includes(l.id))?.headers || [
+          "rowkey",
+          "tos_path",
+          "caption",
+        ],
+    };
+    const old = p.cidMeta![lot.cid!];
+    p.cidMeta![lot.cid!] = old || {
+      mode: "fixed",
+      version: 1,
+      headers: lot.headers!,
     };
     lot.rule =
       p.rules[nodeId] || p.lots.find((l) => parents.includes(l.id))?.rule;
@@ -322,9 +391,14 @@ export function applyPlan(
     nodeId: string,
     q: number,
     states: PlanLot["state"][] = ["available"],
+    cidId?: string,
   ) => {
     const lots = p.lots.filter(
-      (l) => l.nodeId === nodeId && states.includes(l.state) && l.remaining > 0,
+      (l) =>
+        l.nodeId === nodeId &&
+        states.includes(l.state) &&
+        l.remaining > 0 &&
+        (!cidId || l.cid === cidId),
     );
     need(
       lots.reduce((s, l) => s + l.remaining, 0) >= q,
@@ -430,8 +504,15 @@ export function applyPlan(
       log(n!.label + (n!.paused ? "暂停" : "恢复"));
     } else if (a.type === "request") {
       need(a.requestId, "请求无效");
-      p.requests[a.requestId!] = { nodeId: n!.id, used: false };
-      log("发起执行器创建 " + n!.label);
+      p.requests[a.requestId!] = {
+        nodeId: n!.id,
+        used: false,
+        kind: a.pendingKind || "executor",
+      };
+      log(
+        (a.pendingKind === "selection" ? "发起圈选 " : "发起执行器创建 ") +
+          n!.label,
+      );
     } else if (a.type === "bind") {
       need(n!.kind === "stage", "仅工序可绑定");
       need(
@@ -524,48 +605,162 @@ export function applyPlan(
           (removed ? " / " + removed.join(",") : "") +
           "；历史生产与血缘保留",
       );
+    } else if (a.type === "configureOutput") {
+      need(n!.kind === "stage", "仅生产环节可配置产出");
+      need(
+        !p.lots.some((l) => l.nodeId === n!.id && l.executorId),
+        "已有生产记录，请新增工序变更生产模式",
+      );
+      need(["fixed", "append"].includes(a.outputMode || ""), "请选择生产模式");
+      n!.outputMode = a.outputMode;
+      log("产出模式：" + a.outputMode);
     } else if (a.type === "ingest") {
       need(n!.kind === "source" && !n!.paused, "来源不可接入");
       need(a.eventId && !p.seen.includes(a.eventId), "此批数据已接入");
-      if (n!.mode === "selection")
-        need(a.cid?.startsWith("DEMO-CID-"), "请检索并确认结果后接入CID");
+      if (n!.mode === "selection") {
+        need(a.cid?.startsWith("DEMO-CID-"), "圈选CID无效");
+        if (a.requestId) {
+          const req = p.requests[a.requestId];
+          need(
+            req &&
+              req.kind === "selection" &&
+              req.nodeId === n!.id &&
+              !req.used,
+            "圈选回传已使用或节点不匹配",
+          );
+          req.used = true;
+        }
+      }
       if (n!.mode === "purchase")
         need(
           !p.lots.some((l) => l.nodeId === n!.id),
           "采买是一次性导入，新增采购请建新来源",
         );
       const q = amount();
-      put(n!.id, q, [], "available", a.cid);
+      const cidId =
+        a.cid ||
+        (n!.mode === "collection" ? "DEMO-CID-" + n!.id : next("DEMO-CID"));
+      put(n!.id, q, [], "available", cidId);
+      p.cidMeta![cidId].mode = n!.mode === "collection" ? "append" : "fixed";
       p.seen.push(a.eventId!);
       log(n!.label + "接入 " + q.toLocaleString() + " 条（批次元数据）");
     } else if (a.type === "offline") {
-      need(["sourcePool", "buffer"].includes(n!.kind), "只能从池登记离线加工");
-      const q = amount(),
-        parents = consume(n!.id, q);
+      need(["sourcePool", "buffer"].includes(n!.kind), "只能在池内处理CID");
+      need(a.cid, "请只选择一个CID");
+      const cid = planCids(p, n!.id).find((c) => c.id === a.cid);
+      need(cid && cid.available > 0, "CID没有可处理的数据");
+      need(
+        !p.offline.some((j) => j.cid === a.cid && j.status === "processing"),
+        "该CID已在离线处理",
+      );
+      need(
+        cid!.consumed === 0,
+        "CID已有数据进入下游生产，不能覆盖；请在平台生成新CID后接入",
+      );
+      const records = p.lots.filter(
+        (l) =>
+          l.nodeId === n!.id &&
+          l.cid === a.cid &&
+          l.state === "available" &&
+          l.remaining > 0,
+      );
+      const snapshot = records.map((l) => ({
+        id: l.id,
+        quantity: l.quantity,
+        remaining: l.remaining,
+      }));
+      for (const l of records) l.state = "offline";
       p.offline.push({
         id: next("OFFLINE"),
         nodeId: n!.id,
-        quantity: q,
-        parents,
-        cid: next("DEMO-CID"),
+        quantity: cid!.available,
+        parents: records.map((l) => l.id),
+        cid: a.cid!,
+        version: cid!.version,
+        headers: cid!.headers,
+        snapshot,
         status: "processing",
         at: now,
       });
-      log("冻结离线加工范围 " + q.toLocaleString() + " 条；新增库存不受影响");
+      log(
+        "登记单一CID离线处理 " +
+          a.cid +
+          "，当前 " +
+          cid!.available.toLocaleString() +
+          " 条",
+      );
     } else if (a.type === "offlineReturn" || a.type === "offlineCancel") {
       const job = p.offline.find((j) => j.id === a.lotId && j.nodeId === n!.id);
-      need(job?.status === "processing", "离线批次已结束或不存在");
-      const q = a.type === "offlineCancel" ? job!.quantity : amount();
-      need(q <= job!.quantity, "回传数量不能超过导出范围；新增数据另登记");
-      put(n!.id, q, job!.parents, "available", job!.cid);
-      job!.status = a.type === "offlineCancel" ? "cancelled" : "returned";
-      log(
-        "离线" +
-          (a.type === "offlineCancel" ? "取消解冻" : "回传确认") +
-          " " +
-          job!.id +
-          "；保持CID，遗漏范围不再可用",
-      );
+      need(job?.status === "processing", "离线任务已结束或不存在");
+      if (!job!.snapshot && a.type === "offlineCancel") {
+        put(n!.id, job!.quantity, job!.parents, "available", job!.cid);
+        job!.status = "cancelled";
+        log("已取消旧版离线任务，仅解除占用，不覆盖CID");
+        p.revision++;
+        return p;
+      }
+      need(job!.snapshot, "旧版离线任务请先取消，再选择实际CID处理");
+      const meta = p.cidMeta![job!.cid] || {
+        mode: "fixed" as const,
+        version: 1,
+        headers: job!.headers || ["rowkey", "tos_path", "caption"],
+      };
+      need(meta.version === (job!.version || 1), "CID版本冲突，请重新下载核对");
+      for (const item of job!.snapshot!) {
+        const l = p.lots.find((l) => l.id === item.id);
+        need(
+          l &&
+            l.state === "offline" &&
+            l.quantity === item.quantity &&
+            l.remaining === item.remaining,
+          "离线范围已经变化，禁止覆盖",
+        );
+      }
+      if (a.type === "offlineCancel") {
+        for (const item of job!.snapshot!) {
+          p.lots.find((l) => l.id === item.id)!.state = "available";
+        }
+        job!.status = "cancelled";
+        log("取消离线处理 " + job!.cid);
+      } else {
+        need(a.cid === job!.cid, "上传CID与所选CID不一致");
+        need(a.expectedVersion === (job!.version || 1), "上传清单版本不匹配");
+        need(
+          Number.isSafeInteger(a.quantity) && a.quantity! >= 0,
+          "上传后的总量无效",
+        );
+        const headers = a.headers || meta.headers;
+        need(
+          Array.isArray(headers) &&
+            headers.includes("rowkey") &&
+            headers.includes("tos_path") &&
+            headers.every((h) => typeof h === "string" && h.trim()) &&
+            new Set(headers).size === headers.length,
+          "回传必须保留原始定位表头，字段名不能为空或重复",
+        );
+        for (const item of job!.snapshot!) {
+          const l = p.lots.find((l) => l.id === item.id)!;
+          l.state = "available";
+          l.quantity = 0;
+          l.remaining = 0;
+        }
+        put(n!.id, a.quantity!, job!.parents, "available", job!.cid);
+        p.cidMeta![job!.cid] = {
+          ...meta,
+          version: meta.version + 1,
+          headers: a.headers || meta.headers,
+        };
+        job!.status = "returned";
+        log(
+          "覆盖原CID " +
+            job!.cid +
+            "，回传 " +
+            a.quantity!.toLocaleString() +
+            " 条；池现存 " +
+            stock(p, n!.id).toLocaleString() +
+            " 条，期间新增保留",
+        );
+      }
     } else if (a.type === "retain") {
       need(n!.kind === "delivery", "仅交付池可留存");
       const all = p.lots.filter(
@@ -607,8 +802,16 @@ export function applyPlan(
             "请选择该执行器下的一个实际生产批次",
           );
       }
-      const q = amount(),
-        parents = consume(n!.id, q);
+      const candidates = planCids(p, n!.id).filter((c) => c.available > 0);
+      const selectedCid =
+        a.cid || (candidates.length === 1 ? candidates[0].id : undefined);
+      need(selectedCid, "请选择单一输入CID，不能合并多个CID");
+      const input = candidates.find((c) => c.id === selectedCid);
+      need(input, "CID不可用");
+      const q = to!.kind === "stage" ? amount() : input!.available;
+      if (to!.kind !== "stage" && a.quantity !== undefined)
+        need(a.quantity === q, "池间交接按整个CID，只有生产环节按数量执行");
+      const parents = consume(n!.id, q, ["available"], selectedCid);
       const l = put(
         to!.id,
         q,
@@ -618,6 +821,7 @@ export function applyPlan(
           : to!.kind === "delivery"
             ? "delivered"
             : "available",
+        selectedCid,
       );
       l.rule = p.rules[n!.id] || l.rule;
       l.executorId = a.executorId || to!.executorId;
@@ -650,7 +854,18 @@ export function applyPlan(
         need(out, "请连接输出缓冲池");
         l!.state = "available";
         l!.remaining = 0;
-        put(out!.target, l!.quantity, [l!.id]);
+        const outputCid =
+          n!.outputMode === "append"
+            ? "DEMO-CID-OUTPUT-" + n!.id
+            : "DEMO-CID-" +
+              n!.id +
+              "-" +
+              l!.executorId +
+              "-" +
+              l!.batchIds?.[0];
+        put(out!.target, l!.quantity, [l!.id], "available", outputCid);
+        p.cidMeta![outputCid].mode =
+          n!.outputMode === "append" ? "append" : "fixed";
         log("产出回传至缓冲池 " + l!.quantity.toLocaleString() + " 条");
       }
     } else if (a.type === "recover") {

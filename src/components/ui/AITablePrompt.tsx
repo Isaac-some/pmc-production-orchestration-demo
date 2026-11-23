@@ -2,9 +2,11 @@ import React, { useEffect, useId, useState } from "react";
 import { Alert, Button, Collapse, Input, Modal, Space, Table, Tag } from "antd";
 import { ExperimentOutlined, TableOutlined } from "@ant-design/icons";
 import "./ai-table-prompt.css";
+import { HeaderTagInput } from "./HeaderTagInput";
 
 export interface AITablePromptProps {
   nodeId: string;
+  headers?: string[];
   rule?: { prompt: string; columns: string; version: number };
   disabled?: boolean;
   onConfirm: (prompt: string, columns: string) => Promise<void>;
@@ -31,6 +33,7 @@ const sample = [
 /** Preview is deliberately bounded and synthetic; confirmation saves a rule, never item data. */
 export function AITablePrompt({
   nodeId,
+  headers = ["rowkey", "tos_path", "caption"],
   rule,
   disabled = false,
   onConfirm,
@@ -122,21 +125,18 @@ export function AITablePrompt({
       >
         <div className="ai-table-prompt-content">
           <p className="ai-table-prompt-intro">
-            描述你希望如何处理数据表。先检查几行结果，再确认整批生产的输入规则。
+            描述处理方式，引用输入表头，也可创建新的输出表头。
           </p>
           <label className="ai-table-prompt-label" htmlFor={`${id}-prompt`}>
             处理要求
           </label>
-          <Input.TextArea
+          <HeaderTagInput
             id={`${id}-prompt`}
-            aria-describedby={`${id}-scope`}
+            headers={headers}
             value={prompt}
             disabled={saving || disabled}
-            maxLength={6000}
-            autoSize={{ minRows: 3, maxRows: 6 }}
-            placeholder="例如：清理 caption 首尾空格，保留 rowkey 和 tos_path，输出适合人工验收的数据表。"
-            onChange={(event) => {
-              setPrompt(event.target.value);
+            onChange={(value) => {
+              setPrompt(value);
               setPreview(null);
               setError("");
             }}
@@ -203,14 +203,8 @@ export function AITablePrompt({
             >
               <header>
                 <h3>结果预览</h3>
-                <Tag>模拟 AI · 3 行样例</Tag>
+                <Tag>3 行样例 · AI 未接入</Tag>
               </header>
-              <Alert
-                type="info"
-                showIcon
-                message="模拟预览 · 尚未连接 AI 服务"
-                description="下方为固定 caption 清理样例，不代表任意 Prompt 的真实执行结果。确认仅保存规则。"
-              />
               <Table
                 rowKey="rowkey"
                 size="small"
