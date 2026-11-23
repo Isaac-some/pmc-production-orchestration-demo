@@ -181,7 +181,7 @@ function BoardNode({ data, selected }: any) {
     <div className="o-card-node">
       {n.kind !== "source" && (
         <Handle
-          className={"wf-node-port" + (data.inputConnected ? " connected" : "")}
+          className={(n.kind === "buffer" || n.kind === "sourcePool" ? "wf-bridge-port" : "wf-node-port") + (data.inputConnected ? " connected" : "")}
           type="target"
           position={Position.Left}
         />
@@ -257,7 +257,7 @@ function BoardNode({ data, selected }: any) {
       {n.kind !== "delivery" && (
         <Handle
           className={
-            "wf-node-port" + (data.outputConnected ? " connected" : "")
+            (n.kind === "buffer" || n.kind === "sourcePool" ? "wf-bridge-port" : "wf-node-port") + (data.outputConnected ? " connected" : "")
           }
           type="source"
           position={Position.Right}

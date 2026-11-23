@@ -54,6 +54,60 @@
 .wf-source .wf-param > span { display: block; }
 .wf-source .wf-param > strong { display: block; max-width: none; text-align: left; background: none; padding: 0; }
 .wf-sourcePool, .wf-buffer { background: #f8fafb; border-color: #ced9e3; }
+/* Recessed sockets identify stock/relay nodes; their real handles sit inside each opening. */
+.wf-sourcePool::before, .wf-sourcePool::after,
+.wf-buffer::before, .wf-buffer::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 44px;
+  transform: translateY(-50%);
+  box-sizing: border-box;
+  background: var(--wf-canvas, #f4f6f8);
+  border: 1px solid #b7c9d7;
+  pointer-events: none;
+}
+.wf-sourcePool::before, .wf-buffer::before {
+  left: -1px;
+  border-left: 0;
+  border-radius: 0 9px 9px 0;
+}
+.wf-sourcePool::after, .wf-buffer::after {
+  right: -1px;
+  border-right: 0;
+  border-radius: 9px 0 0 9px;
+}
+.wf-card.wf-sourcePool .wf-card-body, .wf-card.wf-buffer .wf-card-body {
+  margin: 0 26px 12px;
+}
+.wf-sourcePool.wf-selected, .wf-buffer.wf-selected { outline: none; border-width: 1px; }
+.wf-sourcePool.wf-selected::before, .wf-sourcePool.wf-selected::after,
+.wf-buffer.wf-selected::before, .wf-buffer.wf-selected::after { border-color: #477eaf; }
+.wf-bridge-port.react-flow__handle {
+  top: 50%;
+  width: 10px;
+  height: 16px;
+  border: 1px solid #819fb7;
+  border-radius: 3px;
+  background: #fff;
+}
+.wf-bridge-port.react-flow__handle-left { left: 7px; }
+.wf-bridge-port.react-flow__handle-right { right: 7px; }
+.wf-bridge-port.react-flow__handle::after {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-top: 1px solid #6688a3;
+  border-right: 1px solid #6688a3;
+  transform: rotate(45deg);
+  position: absolute;
+  top: 5px;
+  left: 1px;
+}
+.wf-bridge-port.react-flow__handle:hover,
+.wf-bridge-port.react-flow__handle.connectingto,
+.wf-bridge-port.react-flow__handle.valid { background: #e7f0f7; border-color: #477eaf; }
 .wf-sourcePool .wf-card-body, .wf-buffer .wf-card-body { margin: 0 12px 12px; padding: 10px 12px; min-height: 96px; background: #fff; border: 1px solid #e4e9ef; border-radius: 6px; gap: 7px; }
 .wf-sourcePool .wf-metrics, .wf-buffer .wf-metrics { display: flex; flex-direction: column; gap: 5px; }
 .wf-sourcePool .wf-metrics > div, .wf-buffer .wf-metrics > div { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }

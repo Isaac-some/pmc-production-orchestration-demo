@@ -92,6 +92,7 @@ function PlanCard({ data }: any) {
       <Handle
         type="target"
         position={Position.Left}
+        className={n.kind === "buffer" || n.kind === "sourcePool" ? "wf-bridge-port" : undefined}
         isConnectable={n.kind !== "source"}
       />
       <WorkflowNodeCard
@@ -194,6 +195,7 @@ function PlanCard({ data }: any) {
       <Handle
         type="source"
         position={Position.Right}
+        className={n.kind === "buffer" || n.kind === "sourcePool" ? "wf-bridge-port" : undefined}
         isConnectable={n.kind !== "delivery"}
       />
     </>
