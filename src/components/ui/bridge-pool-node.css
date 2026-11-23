@@ -1,0 +1,161 @@
+.bridge-pool-node {
+  width: 160px;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.bridge-pool-trigger {
+  width: 160px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  color: #243243;
+  cursor: pointer;
+  font: inherit;
+}
+.bridge-pool-circle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  box-sizing: border-box;
+  border: 1px solid #b9cbd8;
+  border-radius: 50%;
+  background: #fff;
+}
+.bridge-pool-core {
+  position: relative;
+  z-index: 1;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  color: #486c88;
+  background: #fff;
+  border-radius: 50%;
+}
+.bridge-pool-terminal {
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 1px;
+}
+.bridge-pool-in {
+  left: 0;
+}
+.bridge-pool-out {
+  right: 0;
+}
+.bridge-pool-name {
+  margin-top: 10px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 21px;
+  font-weight: 600;
+}
+.bridge-pool-status {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 16px;
+  color: #596b7e;
+}
+.bridge-pool-node[data-flowing="true"] .bridge-pool-circle {
+  border-color: #83a8c5;
+}
+.bridge-pool-node[data-flowing="true"] .bridge-pool-status {
+  color: #356a93;
+}
+.bridge-pool-node.is-selected .bridge-pool-circle,
+.bridge-pool-trigger:hover .bridge-pool-circle {
+  border: 2px solid #477eaf;
+}
+.bridge-pool-trigger:focus-visible {
+  outline: none;
+}
+.bridge-pool-trigger:focus-visible .bridge-pool-circle {
+  outline: 2px solid #477eaf;
+  outline-offset: 4px;
+}
+.bridge-pool-trigger:disabled {
+  cursor: default;
+}
+.bridge-pool-summary {
+  width: 268px;
+  color: #243243;
+  font-variant-numeric: tabular-nums;
+}
+.bridge-pool-summary > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.bridge-pool-summary > header > strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.bridge-pool-summary > header > span {
+  color: #596b7e;
+  font-size: 12px;
+}
+.bridge-pool-body {
+  padding: 12px 0;
+}
+.bridge-pool-body .wf-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+.bridge-pool-body .wf-metrics > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.bridge-pool-body .wf-metrics strong {
+  font-size: 22px;
+  line-height: 28px;
+}
+.bridge-pool-body .wf-metrics > div + div strong {
+  font-size: 14px;
+  line-height: 21px;
+}
+.bridge-pool-body .wf-param {
+  margin-bottom: 8px;
+}
+.bridge-pool-summary > small {
+  font-size: 12px;
+  color: #596b7e;
+  display: block;
+  padding-top: 8px;
+  border-top: 1px solid #e4e9ef;
+}
+/* Circle is centered at x=80, y=48. Endpoints sit on the circle, not its label box. */
+.react-flow__node:has(.bridge-pool-node) > .react-flow__handle,
+.o-card-node:has(.bridge-pool-node) > .react-flow__handle {
+  top: 48px;
+  width: 14px;
+  height: 22px;
+  border: 0;
+  background: transparent;
+  border-radius: 4px;
+}
+.react-flow__node:has(.bridge-pool-node) > .react-flow__handle-left,
+.o-card-node:has(.bridge-pool-node) > .react-flow__handle-left {
+  left: 32px;
+}
+.react-flow__node:has(.bridge-pool-node) > .react-flow__handle-right,
+.o-card-node:has(.bridge-pool-node) > .react-flow__handle-right {
+  right: 32px;
+}
+.react-flow__node:has(.bridge-pool-node) > .react-flow__handle::after,
+.o-card-node:has(.bridge-pool-node) > .react-flow__handle::after {
+  display: none;
+}

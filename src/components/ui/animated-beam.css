@@ -1,0 +1,21 @@
+@keyframes klyv-beam-dash {
+  to {
+    stroke-dashoffset: var(--beam-travel);
+  }
+}
+.klyv-beam {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.klyv-beam-pulse {
+  animation: klyv-beam-dash 2.6s linear infinite;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .klyv-beam-pulse {
+    animation: none !important;
+    display: none;
+  }
+}

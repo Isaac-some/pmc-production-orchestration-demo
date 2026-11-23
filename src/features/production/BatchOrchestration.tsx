@@ -66,6 +66,8 @@ import {
 import { BatchBindings } from "../../components/ui/BatchBindings";
 import { HumanPlatformPrototype } from "../../components/ui/HumanPlatformPrototype";
 import { AITablePrompt } from "../../components/ui/AITablePrompt";
+import { ProductionBeamEdge } from "../../components/ui/ProductionBeamEdge";
+import { planFlowStates } from "../../../shared/production-flow";
 import "./batch-orchestration.css";
 const labels = {
   source: "输入源",
@@ -92,7 +94,11 @@ function PlanCard({ data }: any) {
       <Handle
         type="target"
         position={Position.Left}
-        className={n.kind === "buffer" || n.kind === "sourcePool" ? "wf-bridge-port" : undefined}
+        className={
+          n.kind === "buffer" || n.kind === "sourcePool"
+            ? "wf-bridge-port"
+            : undefined
+        }
         isConnectable={n.kind !== "source"}
       />
       <WorkflowNodeCard
@@ -117,26 +123,28 @@ function PlanCard({ data }: any) {
         }
         variant={n.kind}
         status={
-          data.failed
-            ? "error"
-            : n.paused
-              ? "paused"
+          n.paused
+            ? "paused"
+            : data.failed
+              ? "error"
               : data.running
                 ? "running"
                 : "idle"
         }
         statusLabel={
-          data.failed
-            ? "待处理"
-            : n.paused
-              ? "已暂停"
+          n.paused
+            ? "已暂停"
+            : data.failed
+              ? "待处理"
               : data.running
                 ? "生产中"
-                : n.kind === "stage"
-                  ? n.executorId
-                    ? "已绑定"
-                    : "待绑定"
-                  : "可调度"
+                : data.flowing
+                  ? "流式调度"
+                  : n.kind === "stage"
+                    ? n.executorId
+                      ? "已绑定"
+                      : "待绑定"
+                    : "可调度"
         }
         footer={
           n.kind === "buffer"
@@ -148,6 +156,8 @@ function PlanCard({ data }: any) {
         actionLabel={n.kind === "stage" ? "去标注 / 管理" : "查看与调度"}
         onAction={data.open}
         selected={data.selected}
+        flowing={data.flowing}
+        streaming={data.streaming}
       >
         {n.kind === "source" && (
           <WorkflowNodeParam
@@ -195,13 +205,18 @@ function PlanCard({ data }: any) {
       <Handle
         type="source"
         position={Position.Right}
-        className={n.kind === "buffer" || n.kind === "sourcePool" ? "wf-bridge-port" : undefined}
+        className={
+          n.kind === "buffer" || n.kind === "sourcePool"
+            ? "wf-bridge-port"
+            : undefined
+        }
         isConnectable={n.kind !== "delivery"}
       />
     </>
   );
 }
 const nodeTypes = { plan: memo(PlanCard) };
+const edgeTypes = { beam: memo(ProductionBeamEdge) };
 const initialViewport = { x: 30, y: 70, zoom: 0.85 };
 const ManagedPlanFlow = memo(function ManagedPlanFlow({
   models,
@@ -416,6 +431,7 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
     location.assign(url.href);
   }
   const platformBatches = useMemo(() => planBatches(p), [p]);
+  const flowStates = useMemo(() => planFlowStates(p), [p]);
   const nodeModels = useMemo(
     () =>
       p.nodes.map((n) => ({
@@ -426,6 +442,8 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
           node: n,
           batchCount: platformBatches.filter((b) => b.nodeId === n.id).length,
           selected: n.id === selected,
+          streaming: flowStates.get(n.id)?.streaming,
+          flowing: flowStates.get(n.id)?.active,
           input: p.lots
             .filter(
               (l) => l.nodeId === n.id && l.executorId && l.batchIds?.length,
@@ -455,7 +473,7 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
           open: () => setSelected(n.id),
         },
       })),
-    [p, selected, platformBatches],
+    [p, selected, platformBatches, flowStates],
   );
   const activeEdge = p.edges.find((e) => e.id === edgeId);
   const activeEdgeTarget = p.nodes.find((n) => n.id === activeEdge?.target);
@@ -499,12 +517,20 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
       : null;
   const edges = p.edges.map((e) => ({
     ...e,
-    type: "smoothstep",
+    type: "beam",
+    data: {
+      flowing:
+        !!flowStates.get(e.source)?.active &&
+        !p.nodes.find((n) => n.id === e.target)?.paused,
+    },
     // Give converging edges separate lanes so later edges cannot hide earlier ones.
     pathOptions: {
       offset: 8,
       stepPosition:
-        (p.edges.filter((x) => x.target === e.target).findIndex((x) => x.id === e.id) + 1) /
+        (p.edges
+          .filter((x) => x.target === e.target)
+          .findIndex((x) => x.id === e.id) +
+          1) /
         (p.edges.filter((x) => x.target === e.target).length + 1),
     },
     interactionWidth: 12,
@@ -790,6 +816,7 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
               nodesDraggable={!disabled}
               nodesConnectable={!disabled}
               nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
               defaultViewport={initialViewport}
               minZoom={0.18}
               maxZoom={1.25}
