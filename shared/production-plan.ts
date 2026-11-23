@@ -1,3 +1,4 @@
+import { arrangeProductionNodes, type PlanNodeSize } from "./production-layout";
 /** Aggregate POC ledger. Counts are metadata; no per-item data is materialised. */
 export type PlanNode = {
   id: string;
@@ -96,6 +97,7 @@ export type PlanAction = {
   failed?: number;
   x?: number;
   y?: number;
+  sizes?: PlanNodeSize[];
 };
 const need = (v: unknown, m: string) => {
   if (!v) throw Error(m);
@@ -334,17 +336,75 @@ export function planRisks(p: ProductionPlan) {
       .reduce((s, l) => s + l.remaining, 0),
   };
 }
+/** Repair legacy render-key collisions without deleting either relationship or production facts. */
+export function normalizePlanEdgeIds(plan: ProductionPlan): ProductionPlan {
+  const reserved = new Set(plan.edges.map((edge) => edge.id));
+  const seen = new Set<string>();
+  let serial = 0,
+    changed = false;
+  const edges = plan.edges.map((edge) => {
+    if (!seen.has(edge.id)) {
+      seen.add(edge.id);
+      return edge;
+    }
+    let id: string;
+    do {
+      id = `edge-restored-${++serial}`;
+    } while (reserved.has(id));
+    reserved.add(id);
+    changed = true;
+    return { ...edge, id };
+  });
+  return changed ? { ...plan, edges } : plan;
+}
+
+export function planNodeDeleteReason(
+  plan: ProductionPlan,
+  nodeId: string,
+): string | undefined {
+  const node = plan.nodes.find((n) => n.id === nodeId);
+  if (!node) return "节点不存在";
+  if (
+    plan.lots.some((lot) => lot.nodeId === nodeId) ||
+    plan.offline.some((job) => job.nodeId === nodeId)
+  )
+    return "该节点已有生产或离线记录，不能删除；可暂停调度或解除后续连线";
+  if (node.executorId || node.bindings?.some((b) => b.batchIds.length))
+    return "该节点已绑定平台批次，请先解绑后再删除";
+  if (
+    Object.values(plan.requests).some(
+      (request) => request.nodeId === nodeId && !request.used,
+    )
+  )
+    return "该节点还有未结束的平台创建或圈选，请先完成或取消";
+}
+
 export function applyPlan(
   before: ProductionPlan,
   a: PlanAction,
 ): ProductionPlan {
-  const p = structuredClone(before);
+  const p = structuredClone(normalizePlanEdgeIds(before));
   p.offline ||= [];
   p.cidMeta ||= {};
   p.retention ||= [];
   const n = p.nodes.find((n) => n.id === a.nodeId);
   const now = new Date().toISOString();
-  const next = (prefix: string) => prefix + "-" + ++p.serial;
+  // Seeded edges have IDs even while serial is zero. Never allocate an occupied key.
+  const usedIds = new Set([
+    ...p.nodes.map((n) => n.id),
+    ...p.edges.map((e) => e.id),
+    ...p.lots.map((l) => l.id),
+    ...p.offline.map((j) => j.id),
+    ...Object.keys(p.cidMeta),
+  ]);
+  const next = (prefix: string) => {
+    let id: string;
+    do {
+      id = prefix + "-" + ++p.serial;
+    } while (usedIds.has(id));
+    usedIds.add(id);
+    return id;
+  };
   const log = (s: string) => p.events.push({ at: now, detail: s });
   const amount = () => {
     need(
@@ -473,6 +533,30 @@ export function applyPlan(
     need(!reaches(a.target!), "禁止成环；异常请建新工序");
     p.edges.push({ id: next("edge"), source: a.source!, target: a.target! });
     log("新增交接关系");
+  } else if (a.type === "deleteNode") {
+    need(n, "节点不存在");
+    const reason = planNodeDeleteReason(p, n!.id);
+    need(!reason, reason || "该节点不能删除");
+    p.nodes = p.nodes.filter((node) => node.id !== n!.id);
+    p.edges = p.edges.filter(
+      (edge) => edge.source !== n!.id && edge.target !== n!.id,
+    );
+    delete p.rules[n!.id];
+    log("删除空节点「" + n!.label + "」及相连关系");
+  } else if (a.type === "layout") {
+    need(
+      !a.sizes ||
+        a.sizes.every(
+          (size) =>
+            Number.isFinite(size.width) &&
+            size.width > 0 &&
+            Number.isFinite(size.height) &&
+            size.height > 0,
+        ),
+      "节点尺寸无效",
+    );
+    p.nodes = arrangeProductionNodes(p, a.sizes);
+    log("按上下游整理 " + p.nodes.length + " 个节点");
   } else if (a.type === "disconnect") {
     p.edges = p.edges.filter((e) => e.id !== a.source);
     log("移除后续交接，历史批次保留");

@@ -31,6 +31,8 @@ import {
   CheckCircleOutlined,
   PlusOutlined,
   FullscreenOutlined,
+  DeleteOutlined,
+  ApartmentOutlined,
 } from "@ant-design/icons";
 import {
   ReactFlow,
@@ -49,6 +51,8 @@ import { parseImportCSV } from "../../../shared/process";
 import { usePMC } from "../../api";
 import {
   createPlan,
+  normalizePlanEdgeIds,
+  planNodeDeleteReason,
   stock,
   planRisks,
   planSignals,
@@ -238,13 +242,18 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
   const { state, user, command, busy } = usePMC(),
     { message, modal } = App.useApp();
   const p: ProductionPlan = useMemo(
-    () => state.drafts["production-plan:" + businessId] || createPlan(),
+    () =>
+      normalizePlanEdgeIds(
+        state.drafts["production-plan:" + businessId] || createPlan(),
+      ),
     [state.drafts, businessId],
   );
   const [selected, setSelected] = useState(""),
     [tab, setTab] = useState("canvas"),
     [full, setFull] = useState(false),
     [error, setError] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const graphRef = useRef<HTMLDivElement>(null);
   const [q, setQ] = useState<number>(1000000),
     [targetBatch, setTargetBatch] = useState(""),
     [inputCid, setInputCid] = useState(""),
@@ -306,6 +315,27 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
   const run = (a: PlanAction) => {
     void act(a).catch(() => undefined);
   };
+  const deleteReason = selected ? planNodeDeleteReason(p, selected) : undefined;
+  function requestDelete() {
+    if (!disabled && n) setDeleteOpen(true);
+  }
+  async function arrangeNodes() {
+    await act({
+      type: "layout",
+      sizes: flow.current
+        ?.getNodes()
+        .map((node) => ({
+          id: node.id,
+          width: node.measured?.width || 300,
+          height: node.measured?.height || 324,
+        })),
+    });
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        flow.current?.fitView({ padding: 0.16, maxZoom: 0.9, duration: 200 }),
+      ),
+    );
+  }
   useEffect(() => {
     document.querySelector(".batch-orchestration")?.scrollTo({ top: 0 });
   }, [tab]);
@@ -706,13 +736,6 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
             操作记录 {p.events.length}
           </Button>
           <Button
-            icon={<PlusOutlined aria-hidden="true" />}
-            disabled={disabled}
-            onClick={() => setAdd(true)}
-          >
-            添加节点
-          </Button>
-          <Button
             icon={<FullscreenOutlined aria-hidden="true" />}
             onClick={() => {
               setFull(!full);
@@ -778,8 +801,57 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
       />
       {tab === "canvas" && (
         <div className="batch-work">
-          <div className="batch-graph">
+          <div
+            className="batch-graph"
+            ref={graphRef}
+            tabIndex={0}
+            aria-label="生产编排画布"
+            onPointerDownCapture={(event) => {
+              if (
+                !(event.target as HTMLElement).closest(
+                  'input, textarea, select, button, a, [contenteditable="true"], [role="combobox"]',
+                )
+              )
+                graphRef.current?.focus({ preventScroll: true });
+            }}
+            onKeyDown={(event) => {
+              if (
+                (event.key === "Backspace" || event.key === "Delete") &&
+                !(event.target as HTMLElement).closest(
+                  'input, textarea, select, [contenteditable="true"], [role="combobox"]',
+                ) &&
+                selected &&
+                !disabled
+              ) {
+                event.preventDefault();
+                event.stopPropagation();
+                requestDelete();
+              }
+            }}
+          >
             <div className="batch-graph-tools">
+              <Button
+                icon={<PlusOutlined aria-hidden="true" />}
+                disabled={disabled}
+                onClick={() => setAdd(true)}
+              >
+                添加节点
+              </Button>
+              <Button
+                icon={<ApartmentOutlined aria-hidden="true" />}
+                disabled={disabled || !p.nodes.length}
+                onClick={() => void arrangeNodes().catch(() => undefined)}
+              >
+                整理节点
+              </Button>
+              <Button
+                icon={<DeleteOutlined aria-hidden="true" />}
+                danger
+                disabled={disabled || !n}
+                onClick={requestDelete}
+              >
+                删除节点
+              </Button>
               <Button onClick={() => flow.current?.fitView({ padding: 0.12 })}>
                 查看全链路
               </Button>
@@ -812,6 +884,8 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
               maxZoom={1.25}
               onInit={(f) => (flow.current = f)}
               onNodeClick={(_, n) => setSelected(n.id)}
+              onPaneClick={() => setSelected("")}
+              deleteKeyCode={null}
               onNodeDragStop={(_, n) =>
                 run({
                   type: "move",
@@ -820,10 +894,20 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
                   y: n.position.y,
                 })
               }
-              onConnect={(e) =>
-                !disabled &&
-                run({ type: "connect", source: e.source!, target: e.target! })
-              }
+              onConnect={(e) => {
+                if (disabled) return;
+                const existing = p.edges.find(
+                  (edge) =>
+                    edge.source === e.source && edge.target === e.target,
+                );
+                if (existing) {
+                  setError("");
+                  setEdgeId(existing.id);
+                  setEdgeCid("");
+                  return;
+                }
+                run({ type: "connect", source: e.source!, target: e.target! });
+              }}
               onEdgeClick={(_, e) => {
                 setEdgeId(e.id);
                 setEdgeCid("");
@@ -1370,6 +1454,29 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
         }}
       />
       <Modal
+        title={n ? `删除「${n.label}」？` : "删除节点"}
+        open={deleteOpen}
+        onCancel={() => setDeleteOpen(false)}
+        okText="确认删除"
+        cancelText="取消"
+        okButtonProps={{
+          danger: true,
+          disabled: !!deleteReason || disabled || !n,
+        }}
+        confirmLoading={busy}
+        onOk={async () => {
+          await act({ type: "deleteNode", nodeId: selected });
+          setDeleteOpen(false);
+          setSelected("");
+        }}
+      >
+        {deleteReason ? (
+          <Alert type="warning" showIcon message={deleteReason} />
+        ) : (
+          <p>将删除当前空节点、节点配置和相连关系，其他节点与历史记录保留。</p>
+        )}
+      </Modal>
+      <Modal
         title="离线处理 CID"
         open={offline}
         onCancel={() => {
@@ -1681,7 +1788,11 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
       >
         <div className="batch-modal-fields">
           <label>名称</label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} />
+          <Input
+            aria-label="节点名称"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
           <label>节点职责</label>
           <Select
             value={kind}
