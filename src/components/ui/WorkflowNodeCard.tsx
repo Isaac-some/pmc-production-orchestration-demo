@@ -2,8 +2,6 @@ import React, { forwardRef, useId, type ReactNode } from "react";
 import {
   CheckOutlined,
   ExclamationCircleOutlined,
-  LockOutlined,
-  ExportOutlined,
   PlayCircleOutlined,
   ArrowRightOutlined,
 } from "@ant-design/icons";
@@ -55,10 +53,13 @@ export const WorkflowNodeCard = forwardRef<
   ref,
 ) {
   const titleId = useId();
-  const isPool = variant === "sourcePool" || variant === "buffer";
+  const isPool =
+    variant === "sourcePool" || variant === "buffer" || variant === "delivery";
   if (isPool)
     return (
       <BridgePoolNode
+        icon={icon}
+        terminal={variant === "delivery"}
         title={title}
         subtitle={subtitle}
         selected={selected}
@@ -72,11 +73,7 @@ export const WorkflowNodeCard = forwardRef<
         {children}
       </BridgePoolNode>
     );
-  const FooterIcon = isPool
-    ? LockOutlined
-    : variant === "delivery"
-      ? ExportOutlined
-      : ArrowRightOutlined;
+  const FooterIcon = ArrowRightOutlined;
   return (
     <div
       ref={ref}

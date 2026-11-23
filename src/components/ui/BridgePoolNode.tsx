@@ -6,6 +6,8 @@ import "./bridge-pool-node.css";
 
 export function BridgePoolNode({
   title,
+  icon,
+  terminal,
   subtitle,
   selected,
   flowing,
@@ -16,6 +18,8 @@ export function BridgePoolNode({
   disabled,
 }: {
   title: string;
+  icon?: ReactNode;
+  terminal?: boolean;
   subtitle: string;
   selected?: boolean;
   flowing?: boolean;
@@ -61,7 +65,7 @@ export function BridgePoolNode({
       >
         <button
           type="button"
-        className="bridge-pool-trigger nopan"
+          className="bridge-pool-trigger nopan"
           aria-label={`查看${title}详情`}
           disabled={disabled}
           onClick={(e) => {
@@ -78,16 +82,18 @@ export function BridgePoolNode({
               curvature={-18}
               paused={!flowing}
             />
-            <AnimatedBeam
-              containerRef={container}
-              fromRef={core}
-              toRef={output}
-              curvature={18}
-              delay={0.6}
-              paused={!flowing}
-            />
+            {!terminal && (
+              <AnimatedBeam
+                containerRef={container}
+                fromRef={core}
+                toRef={output}
+                curvature={18}
+                delay={0.6}
+                paused={!flowing}
+              />
+            )}
             <span className="bridge-pool-core" ref={core}>
-              <DatabaseOutlined />
+              {icon || <DatabaseOutlined />}
             </span>
             <span
               ref={output}
