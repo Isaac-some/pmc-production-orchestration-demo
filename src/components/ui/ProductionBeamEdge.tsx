@@ -1,24 +1,22 @@
 import React from "react";
 import {
   BaseEdge,
-  getSmoothStepPath,
+  getBezierPath,
   type EdgeProps,
   type Edge,
 } from "@xyflow/react";
 import { BeamPath } from "./klyv-animated-beam";
 
-type BeamEdge = Edge<{ flowing: boolean }> & {
-  pathOptions?: { offset?: number; stepPosition?: number };
-};
+type BeamEdge = Edge<{ flowing: boolean }>;
 export function ProductionBeamEdge(props: EdgeProps<BeamEdge>) {
-  const [path, labelX, labelY] = getSmoothStepPath({
+  const [path, labelX, labelY] = getBezierPath({
     sourceX: props.sourceX,
     sourceY: props.sourceY,
     targetX: props.targetX,
     targetY: props.targetY,
     sourcePosition: props.sourcePosition,
     targetPosition: props.targetPosition,
-    ...props.pathOptions,
+    curvature: 0.3,
   });
   return (
     <>

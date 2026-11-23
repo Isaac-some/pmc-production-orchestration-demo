@@ -523,16 +523,6 @@ export function BatchOrchestration({ businessId }: { businessId: string }) {
         !!flowStates.get(e.source)?.active &&
         !p.nodes.find((n) => n.id === e.target)?.paused,
     },
-    // Give converging edges separate lanes so later edges cannot hide earlier ones.
-    pathOptions: {
-      offset: 8,
-      stepPosition:
-        (p.edges
-          .filter((x) => x.target === e.target)
-          .findIndex((x) => x.id === e.id) +
-          1) /
-        (p.edges.filter((x) => x.target === e.target).length + 1),
-    },
     interactionWidth: 12,
     ariaLabel: `${p.nodes.find((n) => n.id === e.source)?.label} → ${p.nodes.find((n) => n.id === e.target)?.label}`,
     labelStyle: { fontSize: 12, fill: "#596b7e" },
